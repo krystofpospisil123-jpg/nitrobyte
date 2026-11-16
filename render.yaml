@@ -1,0 +1,15 @@
+# Render blueprint for NITROBYTE. Render reads this file when you create the service from the repository.
+services:
+  - type: web
+    name: nitrobyte
+    runtime: node
+    region: frankfurt               # lowest ping from Czechia
+    plan: starter                   # always on (the free plan sleeps after 15 minutes without traffic; use `free` only for testing)
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: HOSTED                 # plain HTTP inside, Render adds HTTPS
+        value: "1"
+      - key: NODE_VERSION
+        value: "22"

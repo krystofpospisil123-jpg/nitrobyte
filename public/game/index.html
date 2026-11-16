@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<title>NITROBYTE</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --panel: rgba(12, 14, 40, .88); --edge: #ff9a1a; --pink: #ff2d9a; --cyan: #35e8ff; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: "Courier New", monospace; font-weight: bold; color: #fff; }
+  canvas#c { width: 100vw; height: 100vh; display: block; image-rendering: pixelated; }
+  /* CRT feel: faint scanlines + vignette over everything */
+  #crt { position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background: repeating-linear-gradient(to bottom, rgba(0,0,0,.10) 0 1px, transparent 1px 3px),
+                radial-gradient(ellipse at center, transparent 62%, rgba(0,0,10,.45) 100%); }
+  .pix { text-shadow: 3px 3px 0 #000; }
+
+  /* --- position / time (top left) --- */
+  #posbox { position: fixed; top: 14px; left: 14px; width: 250px; background: var(--panel); border: 3px solid var(--pink); box-shadow: 0 0 0 3px #000; }
+  #posbox .tag { display: inline-block; padding: 1px 12px 1px 8px; font-size: 14px; color: #fff; clip-path: polygon(0 0, 100% 0, 85% 100%, 0 100%); }
+  .pinkbg { background: var(--pink); } .orangebg { background: var(--edge); color: #1a1000 !important; }
+  #posrow { display: flex; align-items: baseline; gap: 6px; padding: 0 12px; }
+  #pos { font-size: 62px; color: #ffb21a; line-height: 1; text-shadow: 3px 3px 0 #000; }
+  #poscount { font-size: 34px; }
+  #timebox { border-top: 3px solid var(--edge); background: #0a0c26; }
+  #time { font-size: 34px; padding: 2px 12px 4px; letter-spacing: 2px; }
+
+  /* --- lap (bottom left) --- */
+  #lapbox { position: fixed; left: 18px; bottom: 16px; font-size: 44px; text-shadow: 4px 4px 0 #000; letter-spacing: 1px; }
+  #lapbox b { color: #ffd21a; font-size: 56px; }
+
+  /* --- speedometer (bottom right) --- */
+  #speedo { position: fixed; right: 12px; bottom: 8px; width: 230px; height: 230px; }
+  #dial { width: 230px; height: 230px; image-rendering: pixelated; }
+  #kmh { position: absolute; left: 0; width: 100%; top: 98px; text-align: center; font-size: 15px; color: #bff; }
+  #speednum { position: absolute; right: 20px; top: 118px; font-size: 40px; text-shadow: 3px 3px 0 #000; }
+  #speednum small { font-size: 14px; vertical-align: top; }
+  #gear { position: absolute; right: 22px; top: 168px; font-size: 22px; }
+  #gear b { font-size: 34px; color: #ffd21a; }
+  #boost { position: fixed; right: 250px; bottom: 22px; }
+  #boost .label { font-size: 22px; color: #ffd21a; text-shadow: 2px 2px 0 #000; }
+  #boostbar { display: flex; gap: 2px; padding: 3px; background: #0a0c26; border: 3px solid var(--cyan); transform: skewX(-18deg); width: 250px; height: 18px; }
+  #boostbar i { flex: 1; background: #301020; }
+  #boostbar i.on { background: var(--c); }
+  #boostbar.fire i.on { background: #ff8a1a; animation: flick .15s steps(2) infinite; }
+  @keyframes flick { 50% { background: #ffe36a; } }
+
+  /* --- minimap (top right) --- */
+  #mapbox { position: fixed; top: 10px; right: 14px; width: 200px; text-align: right; }
+  #mapbox .stage { font-size: 22px; text-shadow: 3px 3px 0 #000; }
+  #map { width: 200px; height: 170px; image-rendering: pixelated; display: block; }
+  #standings { margin-top: 4px; background: var(--panel); padding: 6px 10px; font-size: 13px; text-align: left; border: 2px solid #44486a; }
+  #standings div { margin: 2px 0; } #standings .me { color: #ffd23a; }
+
+  /* --- lobby QR panel, banner, results --- */
+  #panel { position: fixed; top: 12px; left: 12px; background: var(--panel); border: 3px solid #8a8fd0; padding: 10px 12px; width: 190px; z-index: 5; }
+  #panel img { width: 100%; image-rendering: pixelated; background: #fff; display: block; }
+  #panel .url { font-size: 11px; word-break: break-all; margin: 6px 0; color: #9fb0ff; }
+  #players div { margin: 3px 0; font-size: 13px; }
+  .dot { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 1px solid #fff; }
+  #banner { position: fixed; top: 30%; width: 100%; text-align: center; font-size: 110px; text-shadow: 5px 5px 0 #000; pointer-events: none; }
+  #banner.small { font-size: 26px; line-height: 1.4; }
+  #results { position: fixed; inset: 0; background: rgba(5,5,25,.88); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 22px; z-index: 6; }
+  #results[hidden], #panel[hidden] { display: none; }
+  #results table { border-collapse: collapse; margin: 14px 0; min-width: 420px; }
+  #results td { padding: 6px 14px; border-bottom: 1px solid #445; }
+  #hint { position: fixed; bottom: 4px; left: 50%; transform: translateX(-50%); font-size: 11px; opacity: .55; white-space: nowrap; }
+
+  /* --- menus --- */
+  body.inmenu #mapbox, body.inmenu #coinbox, body.inmenu #boost, body.inmenu #speedo, body.inmenu #posbox, body.inmenu #lapbox, body.inmenu #hint { display: none !important; }
+  #menu { position: fixed; inset: 0; z-index: 10; background: linear-gradient(90deg, rgba(5,6,24,.92) 0%, rgba(5,6,24,.75) 45%, rgba(5,6,24,.15) 100%); }
+  .screen { position: absolute; inset: 0; display: flex; }
+  #title { flex-direction: column; justify-content: center; padding-left: 8vw; cursor: pointer; }
+  .logo { font-size: min(11vw, 150px); line-height: .95; font-style: italic; letter-spacing: 4px; transform: skewX(-8deg); }
+  .logo span { display: block; color: #fff; text-shadow: 6px 6px 0 #ff2d9a, 12px 12px 0 #000; }
+  .logo span.b { color: #ffd21a; text-shadow: 6px 6px 0 #ff7a1a, 12px 12px 0 #000; margin-left: 5vw; }
+  .sub { margin: 18px 0 26px 6px; font-size: 22px; color: #9fb0ff; }
+  .joinbox { display: flex; gap: 16px; align-items: flex-start; background: var(--panel); border: 3px solid #8a8fd0; padding: 12px; width: fit-content; }
+  .joinbox img { width: 150px; image-rendering: pixelated; background: #fff; }
+  .joinbox .url { font-size: 12px; color: #9fb0ff; max-width: 220px; word-break: break-all; margin-bottom: 8px; }
+  .joinbox .hdr { color: #ffd21a; margin-bottom: 6px; }
+  #menuplayers div { margin: 4px 0; font-size: 15px; }
+  .press { margin-top: 28px; font-size: 24px; color: #ffd21a; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+
+  #setup { align-items: center; justify-content: space-between; padding: 0 6vw; }
+  #setup .left { width: min(560px, 55vw); }
+  #setup h2, #pause h2 { font-size: 40px; margin: 0 0 18px; text-shadow: 4px 4px 0 #ff2d9a; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; margin: 8px 0; background: var(--panel); border: 3px solid #3a3e6a; font-size: 24px; cursor: pointer; }
+  .row.sel { border-color: #ffd21a; background: rgba(60,46,0,.85); transform: translateX(10px); box-shadow: 0 0 0 3px #000; }
+  .row .label { color: #9fb0ff; font-size: 18px; }
+  .row.sel .label { color: #fff; }
+  .row .val { display: flex; align-items: center; gap: 14px; }
+  .row .txt { min-width: 150px; text-align: center; color: #ffd21a; }
+  .row .arrow { color: #ff9a1a; padding: 0 6px; cursor: pointer; }
+  .row .arrow:hover { color: #fff; }
+  .row.start { justify-content: center; background: #ff2d9a; border-color: #fff; font-size: 30px; margin-top: 18px; }
+  .row.start.sel { background: #ff7a1a; }
+  #setup .help { margin-top: 18px; font-size: 13px; color: #8a90c0; line-height: 1.6; }
+  #setup .right { text-align: center; }
+  #trackprev { width: min(360px, 32vw); border: 4px solid #ff3b6b; image-rendering: pixelated; box-shadow: 0 0 0 4px #000; background: #000; }
+  #trackname { font-size: 32px; margin-top: 12px; color: #ffd21a; text-shadow: 3px 3px 0 #000; }
+  #trackinfo { font-size: 15px; color: #bfc6ff; margin-top: 6px; line-height: 1.6; }
+
+  #pause { position: fixed; inset: 0; z-index: 9; background: rgba(5,6,24,.72); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  #pausemenu { min-width: 360px; }
+  #pause .row { justify-content: center; }
+
+  /* --- coins HUD, title menu, garage --- */
+  #coinbox { position: fixed; top: 176px; left: 14px; font-size: 26px; background: var(--panel); border: 3px solid #ffd21a; padding: 3px 12px; text-shadow: 2px 2px 0 #000; }
+  #coinbox #coinsrun { color: #7dff9a; font-size: 18px; margin-left: 6px; }
+  .coin { display: inline-block; width: 18px; height: 18px; background: #ffc81a; border: 3px solid #b98a00; border-radius: 50%; vertical-align: -2px; }
+  #coinbox.pop { animation: pop .25s ease-out; }
+  @keyframes pop { 50% { transform: scale(1.25); } }
+  .wallet { color: #ffd21a; font-size: 26px; text-shadow: 2px 2px 0 #000; margin-left: 14px; }
+  #titlemenu { margin-top: 26px; width: min(380px, 80vw); }
+  #titlemenu .row { font-size: 30px; }
+  .titlefoot { margin-top: 12px; display: flex; align-items: baseline; gap: 14px; }
+  .titlefoot .wallet { margin-left: 0; }
+  .hint2 { font-size: 12px; color: #8a90c0; }
+  #menu.overcar { background: linear-gradient(90deg, rgba(5,6,24,.92) 0%, rgba(5,6,24,.7) 42%, rgba(5,6,24,0) 70%); }
+  #garage { align-items: center; padding: 0 5vw; }
+  #garage .left { width: min(640px, 62vw); }
+  #garage h2 { display: flex; align-items: baseline; }
+  #garage .row { padding: 7px 14px; margin: 5px 0; font-size: 19px; }
+  #garage .row .label { font-size: 15px; }
+  #garage .row .label small { display: block; font-size: 10px; color: #8a90c0; }
+  #garage .row .txt { min-width: 190px; font-size: 18px; }
+  #garage .row.back { justify-content: center; margin-top: 10px; }
+  .sw { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; margin-right: 8px; vertical-align: -2px; }
+  .sw.rainbow { background: linear-gradient(90deg, #f33, #fc3, #3f6, #3cf, #93f); }
+  .badge { font-size: 13px; padding: 2px 8px; min-width: 84px; text-align: center; border: 2px solid; }
+  .badge.on { color: #7dff9a; border-color: #7dff9a; } .badge.own { color: #9fb0ff; border-color: #5a6090; }
+  .badge.cost { color: #ffd21a; border-color: #ffd21a; } .badge.poor { color: #ff6a6a; border-color: #ff6a6a; }
+  #gmsg { min-height: 26px; font-size: 18px; color: #7dff9a; margin: 6px 0; }
+  #gmsg.bad { color: #ff6a6a; }
+  #results .rewards { margin-top: 6px; font-size: 18px; color: #ffd21a; line-height: 1.6; }
+
+  /* --- animations --- */
+  #menu.fresh .row, #pause.fresh .row { animation: rowin .38s cubic-bezier(.2, 1.2, .4, 1) both; }
+  #menu.fresh .row:nth-child(2), #pause.fresh .row:nth-child(2) { animation-delay: .05s; }
+  #menu.fresh .row:nth-child(3) { animation-delay: .1s; } #menu.fresh .row:nth-child(4) { animation-delay: .15s; }
+  #menu.fresh .row:nth-child(5) { animation-delay: .2s; } #menu.fresh .row:nth-child(6) { animation-delay: .25s; }
+  #menu.fresh .row:nth-child(7) { animation-delay: .3s; } #menu.fresh .row:nth-child(8) { animation-delay: .35s; }
+  #menu.fresh .row:nth-child(9) { animation-delay: .4s; } #menu.fresh .row:nth-child(10) { animation-delay: .45s; }
+  @keyframes rowin { from { opacity: 0; transform: translateX(-60px); } to { opacity: 1; transform: none; } }
+  .screen:not(.hidden) { animation: screenin .4s ease-out both; }
+  @keyframes screenin { from { opacity: 0; } to { opacity: 1; } }
+  .row { transition: border-color .12s, background .12s, transform .12s; }
+  .row:hover { border-color: #ffd21a; }
+  .row.sel { animation: selpulse 1.3s ease-in-out infinite; }
+  @keyframes selpulse { 50% { box-shadow: 0 0 0 3px #000, 0 0 18px 2px rgba(255,210,26,.55); } }
+  .row.press { animation: press .2s ease-out; }
+  @keyframes press { 40% { transform: translateX(10px) scale(.95); filter: brightness(1.7); } }
+  .row.buyflash { animation: buyflash .6s ease-out; }
+  @keyframes buyflash { 0% { background: #1f8a4c; transform: scale(1.04) translateX(10px); } 100% { } }
+  .row.shake { animation: shake .35s ease-out; }
+  @keyframes shake { 20% { transform: translateX(-8px); } 40% { transform: translateX(8px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(5px); } }
+  .txt.bump { animation: bump .25s ease-out; display: inline-block; }
+  @keyframes bump { 40% { transform: scale(1.35); color: #fff; } }
+  .arrow { transition: transform .1s, color .1s; display: inline-block; }
+  .arrow:hover { transform: scale(1.35); } .arrow:active { transform: scale(.8); }
+  .logo span { animation: logodrop .7s cubic-bezier(.2, 1.7, .4, 1) both, float 3.2s ease-in-out .8s infinite; }
+  .logo span.b { animation-delay: .15s, 1s; }
+  @keyframes logodrop { from { opacity: 0; transform: translateY(-120px) scale(1.4); } to { opacity: 1; transform: none; } }
+  @keyframes float { 50% { transform: translateY(-7px); } }
+  .sub { animation: screenin .8s .5s ease-out both; }
+  .joinbox { animation: rowin .5s .35s both; }
+  #banner .cd { display: inline-block; animation: cdpop .9s ease-out both; }
+  #banner .cd.go { color: #7dff9a; animation-name: gopop; }
+  #banner .rocket { font-size: 44px; color: #ff9a3c; animation: screenin .3s both; }
+  @keyframes cdpop { 0% { transform: scale(2.6); opacity: 0; } 25% { transform: scale(1); opacity: 1; } 100% { transform: scale(.8); opacity: .15; } }
+  @keyframes gopop { 0% { transform: scale(.4); opacity: 0; } 25% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
+  #results:not([hidden]) { animation: screenin .35s both; }
+  #results table tr { animation: rowin .4s both; }
+  #results table tr:nth-child(2) { animation-delay: .1s; } #results table tr:nth-child(3) { animation-delay: .2s; }
+  #results table tr:nth-child(4) { animation-delay: .3s; } #results table tr:nth-child(5) { animation-delay: .4s; }
+  #results table tr:nth-child(6) { animation-delay: .5s; } #results table tr:nth-child(7) { animation-delay: .6s; } #results table tr:nth-child(8) { animation-delay: .7s; }
+  #toast { position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 3px solid #ffd21a; padding: 6px 18px; font-size: 18px; opacity: 0; pointer-events: none; z-index: 60; }
+  #toast.show { animation: toast 1.6s ease-out; }
+  @keyframes toast { 0% { opacity: 0; transform: translate(-50%, 20px); } 15%, 80% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
+
+  /* --- online screens --- */
+  #online, #lobby { align-items: center; justify-content: space-between; padding: 0 6vw; }
+  #online .left, #lobby .left { width: min(560px, 58vw); }
+  #online label { display: block; font-size: 13px; color: #9fb0ff; margin: 14px 0 4px; letter-spacing: 1px; }
+  #online input { width: 100%; font: inherit; font-size: 26px; padding: 10px 14px; background: #0c0f2e; color: #ffd21a; border: 3px solid #3a3e6a; letter-spacing: 3px; box-sizing: border-box; outline: none; }
+  #online input:focus { border-color: #ffd21a; }
+  #online .obtn { justify-content: center; font-size: 22px; margin-top: 10px; }
+  #omsg { min-height: 26px; font-size: 16px; color: #9fb0ff; margin: 8px 0; }
+  #omsg.bad { color: #ff6a6a; }
+  #lobby h2 .wallet { font-size: 34px; letter-spacing: 6px; }
+  .lobbyrow { cursor: default; }
+  #lobby .help { line-height: 1.7; font-size: 14px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="posbox" class="hidden">
+  <span class="tag pinkbg">POS</span>
+  <div id="posrow"><span id="pos">1</span><span id="poscount" class="pix">/6</span></div>
+  <div id="timebox"><span class="tag orangebg">TIME</span><div id="time">0:00.00</div></div>
+</div>
+<div id="coinbox" class="hidden"><span class="coin"></span> <b id="coins">0</b> <span id="coinsrun"></span></div>
+<div id="lapbox" class="hidden">LAP <b id="lap">1</b> / <span id="laps">3</span></div>
+
+<div id="mapbox">
+  <div class="stage pix" id="stage"></div>
+  <canvas id="map" width="200" height="170"></canvas>
+  <div id="standings"></div>
+</div>
+
+<div id="boost"><div class="label">BOOST</div><div id="boostbar"></div></div>
+<div id="speedo">
+  <canvas id="dial" width="230" height="230"></canvas>
+  <div id="kmh">KMPH</div>
+  <div id="speednum"><span id="speed">0</span><small> km/h</small></div>
+  <div id="gear">GEAR <b id="gearnum">1</b></div>
+</div>
+
+<div id="panel" hidden>
+  <b>PŘIPOJ TELEFON</b>
+  <img id="qr" alt="QR">
+  <div class="url" id="url"></div>
+  <div id="players"></div>
+</div>
+<div id="banner"></div>
+<div id="results" hidden></div>
+<div id="hint">Klávesnice: šipky/WASD · Space = drift · Shift = turbo · Esc = pauza · M = zvuk · T ladění · P QR kód</div>
+<div id="menu" class="hidden">
+  <div id="title" class="screen">
+    <div class="logo"><span>NITRO</span><span class="b">BYTE</span></div>
+    <div class="sub">Retro závody z telefonu na tvém PC</div>
+    <div class="joinbox">
+      <img id="menuqr" alt="QR">
+      <div>
+        <div class="hdr">PŘIPOJ TELEFON <span id="paircode" style="color:#fff"></span></div>
+        <div class="url" id="menuurl"></div>
+        <div id="menuplayers"></div>
+      </div>
+    </div>
+    <div id="titlemenu"></div>
+    <div class="titlefoot"><span id="titlecoins" class="wallet">● 0</span> <span class="hint2">↑↓ vybrat · Enter potvrdit · telefon: plyn = OK</span></div>
+  </div>
+  <div id="setup" class="screen hidden">
+    <div class="left">
+      <h2>NASTAVENÍ ZÁVODU</h2>
+      <div id="rows"></div>
+      <div class="help">PC: šipky NAHORU / DOLŮ = řádek · VLEVO / VPRAVO = změna · Enter = potvrdit · Esc = zpět<br>Telefon: náklon = změna · brzda / drift = řádek nahoru / dolů · plyn = OK</div>
+    </div>
+    <div class="right">
+      <canvas id="trackprev" width="360" height="270"></canvas>
+      <div id="trackname"></div>
+      <div id="trackinfo"></div>
+    </div>
+  </div>
+  <div id="online" class="screen hidden">
+    <div class="left">
+      <h2>ONLINE</h2>
+      <div class="oform">
+        <label>TVOJE JMÉNO</label>
+        <input id="oname" maxlength="16" autocomplete="off" placeholder="Hráč">
+        <div class="row obtn" id="ocreate">★ VYTVOŘIT MÍSTNOST</div>
+        <label>KÓD MÍSTNOSTI OD KAMARÁDA</label>
+        <input id="ocode" maxlength="4" autocomplete="off" placeholder="ABCD">
+        <div class="row obtn" id="ojoin">▶ PŘIPOJIT SE</div>
+        <div id="omsg"></div>
+        <div class="row back" id="oback">◀ ZPĚT</div>
+      </div>
+      <div class="help">Každý hraje na svém počítači a svém telefonu. Všichni otevřou stejnou adresu hry (viz README – tunel), jeden vytvoří místnost a ostatní zadají její kód.</div>
+    </div>
+  </div>
+  <div id="lobby" class="screen hidden">
+    <div class="left">
+      <h2>MÍSTNOST <span id="roomcode" class="wallet">----</span></h2>
+      <div id="lobbylist"></div>
+      <div id="lobbyhint" class="help"></div>
+    </div>
+    <div class="right" style="text-align:center">
+      <div class="hdr" style="color:#ffd21a">TELEFON</div>
+      <img id="lobbyqr" alt="QR" style="width:170px;image-rendering:pixelated;background:#fff;display:block;margin:6px auto">
+      <div id="lobbypair" class="wallet" style="margin:0"></div>
+    </div>
+  </div>
+  <div id="garage" class="screen hidden">
+    <div class="left">
+      <h2>GARÁŽ <span id="wallet" class="wallet">● 0</span></h2>
+      <div id="grows"></div>
+      <div id="gmsg"></div>
+      <div class="help">Šipky vlevo / vpravo = prohlížet · Enter = koupit / vybrat · Esc = zpět<br>Mince sbírej při závodě a za umístění v cíli.</div>
+    </div>
+  </div>
+</div>
+<div id="pause" class="hidden">
+  <h2>PAUZA</h2>
+  <div id="pausemenu"></div>
+</div>
+<div id="toast"></div>
+<div id="crt"></div>
+
+<script type="importmap">{ "imports": { "three": "/vendor/three/build/three.module.js" } }</script>
+<script type="module" src="./main.js"></script>
+</body>
+</html>
