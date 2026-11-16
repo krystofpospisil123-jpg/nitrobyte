@@ -35,6 +35,49 @@ export function windowTextures(base, seed = 1) {
   return res;
 }
 
+let _soft = null;
+/** Soft round glow (white, fades to nothing): used for lamp halos and light pools. */
+export function softGlow() {
+  if (_soft) return _soft;
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const g = cv.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,255,255,.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return (_soft = new THREE.CanvasTexture(cv));
+}
+
+/** Street lamp light: a halo around the bulb and a pool of light on the road, pulled toward the road point (tx, tz). */
+export function lampLight(x, z, tx, tz, color) {
+  const g = new THREE.Group(); g.position.set(x, 0, z);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: softGlow(), color, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false }));
+  halo.material.color.multiplyScalar(0.55);
+  halo.scale.setScalar(4); halo.position.y = 6.2; g.add(halo);
+  const d = Math.hypot(tx - x, tz - z) || 1;
+  const pool = new THREE.Mesh(new THREE.PlaneGeometry(17, 17), new THREE.MeshBasicMaterial({ color, map: softGlow(), transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
+  pool.rotation.x = -Math.PI / 2; pool.position.set((tx - x) / d * 6, 0.16, (tz - z) / d * 6); g.add(pool);
+  return g;
+}
+
+let _puddle = null;
+/** Roughness map of a wet road: mostly dry-ish asphalt with shiny puddles (tileable). Green channel = roughness. */
+export function puddleTexture() {
+  if (_puddle) return _puddle;
+  const S = 128, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d');
+  g.fillStyle = 'rgb(120,120,120)'; g.fillRect(0, 0, S, S);
+  let s = 12345; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 26; i++) {
+    const x = r() * S, y = r() * S, rad = 6 + r() * 16, dark = 25 + r() * 35;
+    for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) {                // draw wrapped copies so it tiles
+      const gr = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, rad);
+      gr.addColorStop(0, `rgba(${dark},${dark},${dark},1)`); gr.addColorStop(1, 'rgba(120,120,120,0)');
+      g.fillStyle = gr; g.fillRect(x + ox - rad, y + oy - rad, rad * 2, rad * 2);
+    }
+  }
+  const t = new THREE.CanvasTexture(g.canvas); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return (_puddle = t);
+}
+
 const boardCache = new Map();
 /** Neon billboard texture with text. */
 export function billboardTexture(text, c1, c2) {
@@ -134,10 +177,14 @@ export function skyscraper(w, h, d, base, seed) {
   const tx = windowTextures(base, seed);
   const geo = new THREE.BoxGeometry(w, h, d);
   scaleUV(geo, w, d, h, 4);
-  const mat = new THREE.MeshLambertMaterial({ map: tx.map, emissiveMap: tx.emissive, emissive: 0xffffff, emissiveIntensity: 0.9, flatShading: true });
+  const mat = new THREE.MeshLambertMaterial({ map: tx.map, emissiveMap: tx.emissive, emissive: 0xffffff, emissiveIntensity: 0.42, flatShading: true });
   const m = new THREE.Mesh(geo, mat);
   m.position.y = h / 2;
   const g = new THREE.Group(); g.add(m);
+  const NEON = [0xff2d9a, 0x35e8ff, 0xff9a1a, 0x8a5cff, 0x2dff9a];
+  const trimCol = NEON[(seed * 3 + Math.floor(w + d)) % NEON.length];
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 0.5, d + 0.5), glow(trimCol)); trim.position.y = h + 0.1; g.add(trim);     // glowing roof edge
+  if (h > 40) { const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, 0.35, d + 0.3), glow(trimCol)); band.position.y = h * 0.55; g.add(band); }
   if (h > 24) {                                        // rooftop antenna with red blinker
     const ant = new THREE.Mesh(new THREE.BoxGeometry(0.3, 6, 0.3), flat(0x666677)); ant.position.y = h + 3; g.add(ant);
     const led = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), glow(0xff3030)); led.position.y = h + 6.2; g.add(led);
@@ -145,7 +192,8 @@ export function skyscraper(w, h, d, base, seed) {
   return g;
 }
 
-const BOARD_TEXTS = [['NEO RUSH', 0x6a1bd6, 0xd6247a], ['FAST !!!', 0x1b3fd6, 0x2a9fd6], ['CYBER TRONIC', 0x1b1b66, 0x7a1bd6], ['TURBO', 0xd66a1b, 0xd6247a], ['SPEED', 0x0d7a6a, 0x2a5fd6]];
+const BOARD_TEXTS = [['NEO RUSH', 0x6a1bd6, 0xd6247a], ['FAST !!!', 0x1b3fd6, 0x2a9fd6], ['CYBER TRONIC', 0x1b1b66, 0x7a1bd6], ['TURBO', 0xd66a1b, 0xd6247a], ['SPEED', 0x0d7a6a, 0x2a5fd6],
+  ['NITRO', 0x0b4fd6, 0x35e8ff], ['DRIFT KINGS', 0xd6241b, 0xff9a1a], ['OCTANE', 0xd69a1b, 0xd6241b], ['TUNER SHOP', 0x7a1bd6, 0x1bd6c0]];
 /** Billboard on two poles, turned to face `facing` ({x,z}). */
 export function billboard(x, z, facing, rand) {
   const [text, c1, c2] = BOARD_TEXTS[Math.floor(rand() * BOARD_TEXTS.length)];
@@ -265,4 +313,121 @@ export function skyAgents(track, spec) {
       if (g.userData.red) { const on = Math.floor(t * 4 + g.userData.phase * 10) % 2 === 0; g.userData.red.visible = on; g.userData.blue.visible = !on; }
     }
   };
+}
+
+// ---------- street city pieces (track theme `street`) ----------
+const shopCache = new Map();
+/** Ground-floor shop front: lit display windows with mullions and a door. Variant 0..3. */
+function shopTexture(v) {
+  if (shopCache.has(v)) return shopCache.get(v);
+  const cv = document.createElement('canvas'); cv.width = 128; cv.height = 32;
+  const g = cv.getContext('2d');
+  const warm = ['#ffd9a0', '#bfe6ff', '#ffc0e0', '#e0ffd0'][v % 4];
+  g.fillStyle = '#16161c'; g.fillRect(0, 0, 128, 32);
+  for (let x = 4; x < 124; x += 30) {
+    const gr = g.createLinearGradient(0, 6, 0, 30); gr.addColorStop(0, warm); gr.addColorStop(1, '#3a3430');
+    g.fillStyle = gr; g.fillRect(x, 6, 24, 24);
+    g.fillStyle = '#16161c'; g.fillRect(x + 11, 6, 2, 24); g.fillRect(x, 16, 24, 1);
+  }
+  g.fillStyle = '#2a2a33'; g.fillRect(0, 0, 128, 4);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+  shopCache.set(v, t);
+  return t;
+}
+const facadeMats = new Map();
+function facadeMat(base, seed) {
+  const key = base + ':' + seed;
+  if (!facadeMats.has(key)) {
+    const tx = windowTextures(base, seed);
+    facadeMats.set(key, new THREE.MeshLambertMaterial({ map: tx.map, emissiveMap: tx.emissive, emissive: 0xffffff, emissiveIntensity: 0.38, flatShading: true }));
+  }
+  return facadeMats.get(key);
+}
+const SHOP_SIGNS = [['PIZZA', 0xd6241b, 0xff9a1a], ['HOTEL', 0x1b3fd6, 0x7a1bd6], ['BAR', 0x7a1bd6, 0xd6247a], ['CAFE', 0x6a3a1b, 0xd69a1b], ['SUSHI', 0xd6241b, 0x1b1b66],
+  ['24/7', 0x0d7a6a, 0x2a9fd6], ['KEBAB', 0xd66a1b, 0xd6241b], ['TUNING', 0x1b1b1b, 0xff7a1a], ['GARAGE', 0x2a2a3a, 0x1b6ad6], ['CLUB', 0xd6247a, 0x35e8ff], ['NOODLES', 0xd69a1b, 0xd6241b]];
+
+/**
+ * City block building facing the road. d = depth (local x), h = height, fl = frontage along the road (local z).
+ * roadSide = +1 / -1: which local x side faces the street (gets the shop front, awning and sign).
+ */
+export function streetBuilding(d, h, fl, base, seed, roadSide, rand) {
+  const g = new THREE.Group();
+  const geo = new THREE.BoxGeometry(d, h + 2, fl);
+  scaleUV(geo, d, fl, h, 4);
+  const main = new THREE.Mesh(geo, facadeMat(base, seed)); main.position.y = h / 2 - 1; g.add(main);
+  // ground floor shops
+  const shop = new THREE.Mesh(new THREE.BoxGeometry(d + 0.3, 3.4, fl + 0.3), new THREE.MeshBasicMaterial({ map: shopTexture(seed), color: 0xb0b0b0 }));
+  shop.material.map.wrapS = THREE.RepeatWrapping; shop.position.y = 1.7; g.add(shop);
+  // roof parapet and the odd rooftop box
+  const parapet = new THREE.Mesh(new THREE.BoxGeometry(d + 0.4, 0.6, fl + 0.4), flat(0x1c1c24)); parapet.position.y = h + 0.3; g.add(parapet);
+  if (rand() < 0.5) { const ac = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.4, 2.4), flat(0x50545e)); ac.position.set((rand() - 0.5) * d * 0.5, h + 1.2, (rand() - 0.5) * fl * 0.5); g.add(ac); }
+  // awning + shop sign on the street side
+  const sx = roadSide * (d / 2 + 0.9);
+  const awnCol = [0x8a1a22, 0x1a4a8a, 0x1a6a3a, 0x2a2a30][Math.floor(rand() * 4)];
+  const awn = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.15, fl * 0.7), flat(awnCol)); awn.position.set(sx, 3.6, 0); awn.rotation.z = roadSide * 0.25; g.add(awn);
+  if (rand() < 0.7) {
+    const [text, c1, c2] = SHOP_SIGNS[Math.floor(rand() * SHOP_SIGNS.length)];
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(fl * 0.6, 8), 1.6), new THREE.MeshBasicMaterial({ map: billboardTexture(text, c1, c2), color: 0xb8b8b8 }));
+    sign.position.set(roadSide * (d / 2 + 0.25), 4.9, 0); sign.rotation.y = roadSide * Math.PI / 2; g.add(sign);
+  }
+  return g;
+}
+
+/** Traffic light on a pole with an arm over the road; `facing` rotation is set by the caller. */
+export function trafficLight(t) {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 6.5, 6), flat(0x3a3d46)); pole.position.y = 3.25; g.add(pole);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 4.5), flat(0x3a3d46)); arm.position.set(0, 6.3, 2.2); g.add(arm);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 2.0, 0.6), flat(0x15161a)); head.position.set(0, 5.4, 4.3); g.add(head);
+  const lamps = [0xff2a1a, 0xffb21a, 0x2aff6a].map((c, k) => {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.1), new THREE.MeshBasicMaterial({ color: 0x222222 }));
+    l.position.set(0, 6.05 - k * 0.65, 4.3 + 0.32); l.userData.on = c; g.add(l); return l;
+  });
+  g.userData.phase = t;
+  g.userData.lamps = lamps;
+  return g;
+}
+/** Cycle the traffic lights (green -> amber -> red), time in seconds. */
+export function updateLights(list, time) {
+  for (const g of list) {
+    const p = ((time + g.userData.phase) % 12);
+    const on = p < 6 ? 2 : p < 7.5 ? 1 : 0;
+    g.userData.lamps.forEach((l, k) => l.material.color.setHex(k === on ? l.userData.on : 0x1c1c1c));
+  }
+}
+
+let _stripe = null;
+/** Red / white striped road block across a closed side street. */
+export function barricade(width) {
+  if (!_stripe) {
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 8;
+    const g = cv.getContext('2d'); for (let x = 0; x < 64; x += 8) { g.fillStyle = (x / 8) % 2 ? '#f2f2f2' : '#d42020'; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 8, 0); g.lineTo(x + 4, 8); g.lineTo(x - 4, 8); g.fill(); }
+    _stripe = new THREE.CanvasTexture(cv); _stripe.colorSpace = THREE.SRGBColorSpace; _stripe.wrapS = THREE.RepeatWrapping;
+  }
+  const g = new THREE.Group();
+  const tex = _stripe.clone(); tex.repeat.set(width / 4, 1); tex.needsUpdate = true;
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(width, 0.6, 0.2), new THREE.MeshLambertMaterial({ map: tex, emissive: 0x222222 })); bar.position.y = 1.0; g.add(bar);
+  for (const x of [-width / 2 + 0.4, width / 2 - 0.4]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1.0, 0.6), flat(0x2a2a30)); leg.position.set(x, 0.5, 0); g.add(leg);
+    const blink = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), glow(0xffa21a)); blink.position.set(x, 1.5, 0); g.add(blink);
+  }
+  return g;
+}
+
+/** Small street tree in a planter. */
+export function streetTree(rand) {
+  const g = new THREE.Group();
+  const pot = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 1.4), flat(0x3a3a40)); pot.position.y = 0.25; g.add(pot);
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 2.6, 5), flat(0x4a3424)); trunk.position.y = 1.6; g.add(trunk);
+  const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(1.6 + rand() * 0.6, 0), flat([0x1f5a32, 0x2a6a3a, 0x24502e][Math.floor(rand() * 3)])); crown.position.y = 3.6; g.add(crown);
+  return g;
+}
+
+/** Street lamp: pole with an arm reaching over the kerb. Arm points along local +x. */
+export function streetLamp(color) {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 7, 6), flat(0x3a3d46)); pole.position.y = 3.5; g.add(pole);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 0.12), flat(0x3a3d46)); arm.position.set(1.0, 6.9, 0); g.add(arm);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.22, 0.45), glow(color)); head.position.set(2.0, 6.8, 0); g.add(head);
+  return g;
 }

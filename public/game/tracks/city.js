@@ -23,27 +23,31 @@ export default {
 
   theme: {
     // sky gradient (top -> middle -> horizon), fog matches the horizon
-    skyTop: 0x05061f, skyMid: 0x2a1560, skyBottom: 0xa0307a, sky: 0x2a1560,
-    fog: 0x4a2078, fogNear: 80, fogFar: 380,
+    skyTop: 0x01020a, skyMid: 0x0a1238, skyBottom: 0x8a3a52, sky: 0x0a1238,    // night with an orange-pink city haze at the horizon
+    fog: 0x1c1238, fogNear: 60, fogFar: 340,
     stars: true,
     windows: true,                // buildings get lit-window textures
-    backdrop: 'skyline', skylineColor: 0x2a1a60,
-    ground: 0x1a1633,
-    road: [0x2a2a38, 0x30303f],   // two tones alternate along the road for a sense of speed
-    lane: 0xcfd6ff,
-    kerb: [0xff3b6b, 0xf2f2f2],
+    backdrop: 'skyline', skylineColor: 0x1a1a55,
+    ground: 0x0e0c20,
+    road: [0x26262e, 0x2b2b34],   // two tones alternate along the road for a sense of speed
+    lane: 0xdfe6ff,
+    kerb: [0xff3b3b, 0xf2f2f2],
+    // "Underground" night look: wet glossy road, bloom on the neon, headlights on
+    night: true, wet: 1, bloom: 0.22, bloomThreshold: 0.92, grade: 1, vignette: 0.4,
+    neon: [0xff2d9a, 0x35e8ff, 0xff9a1a, 0x8a5cff],
+    ambientI: 1.15, sunI: 1.1,
     // neon crash barrier: cars bounce off it
     barrier: { height: 1.4, colors: [0xff3bd0, 0x35e8ff, 0xff9a1a], cap: 0xffffff, glow: true },
     agents: { kind: 'hover', count: 4, height: 30, speed: 0.006 },   // police hover cars with searchlights
-    ambient: 0x9a90e0,
-    sun: 0xffb0d0,
+    ambient: 0x6a72c8,
+    sun: 0x8aa4ff,
   },
 
   // Decoration rules: scattered with a seeded RNG so every run looks the same
   decor: [
     { kind: 'building', count: 130, minDist: 12, maxDist: 70, colors: [0x5b6bd6, 0xd65bb0, 0x4ec9d4, 0x8a8aa8, 0xf0a04b], height: [20, 75], size: [10, 20] },
     { kind: 'billboard', count: 24, minDist: 7, maxDist: 16, colors: [0xffffff] },
-    { kind: 'lamp', count: 70, minDist: 3, maxDist: 4, colors: [0xfff1a8] },
+    { kind: 'lamp', count: 70, minDist: 3, maxDist: 4, colors: [0xffb347, 0xffb347, 0xffe2a8, 0x9fd8ff] },
   ],
   // Neon arches over the road: `at` = position along the lap (0..1)
   overpasses: [{ kind: 'gantry', at: 0.20 }, { kind: 'gantry', at: 0.52 }, { kind: 'gantry', at: 0.85 }],

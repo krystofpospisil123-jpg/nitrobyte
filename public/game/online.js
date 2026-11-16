@@ -13,6 +13,7 @@ export function cleanLook(l) {
   l = l && typeof l === 'object' ? l : {};
   return {
     color: num(l.color),
+    body: CATALOG.body.some(b => b.id === l.body) ? l.body : 'coupe',
     skin: CATALOG.skin.some(s => s.id === l.skin) ? l.skin : 'none',
     wing: Math.max(0, Math.min(3, +l.wing | 0)),
     rims: num(l.rims),

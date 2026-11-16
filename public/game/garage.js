@@ -12,7 +12,7 @@ export class Garage {
   constructor(cb) {
     this.cb = cb;
     this.rows = [
-      { cat: 'color', label: 'BARVA' }, { cat: 'skin', label: 'VZOR' }, { cat: 'wing', label: 'KŘÍDLO' },
+      { cat: 'body', label: 'KAROSERIE' }, { cat: 'color', label: 'BARVA' }, { cat: 'skin', label: 'VZOR' }, { cat: 'wing', label: 'KŘÍDLO' },
       { cat: 'rims', label: 'KOLA' }, { cat: 'glow', label: 'PODSVÍCENÍ' }, { cat: 'flame', label: 'OHEŇ' },
       { up: 'motor' }, { up: 'accel' }, { up: 'turbo' },
       { back: true, label: 'ZPĚT' },
@@ -83,7 +83,7 @@ export class Garage {
     $('wallet').textContent = '● ' + profile.coins;
     $('grows').innerHTML = this.rows.map((r, i) => {
       const sel = i === this.sel ? ' sel' : '';
-      if (r.back) return `<div class="row back${sel}" data-i="${i}">◀ ${r.label}</div>`;
+      if (r.back) return `<div class="row back${sel}" data-i="${i}">‹ ${r.label}</div>`;
       if (r.up) {
         const U = UPGRADES[r.up], lvl = upgradeLevel(r.up), price = upgradePrice(r.up);
         const pips = '■'.repeat(lvl) + '□'.repeat(3 - lvl);
@@ -97,7 +97,7 @@ export class Garage {
       if (profile.equipped[r.cat] === item.id) badge = '<span class="badge on">✔ VYBRÁNO</span>';
       else if (owns(r.cat, item.id)) badge = '<span class="badge own">MÁŠ</span>';
       else badge = `<span class="badge ${profile.coins >= item.price ? 'cost' : 'poor'}">● ${item.price}</span>`;
-      return `<div class="row${sel}" data-i="${i}"><span class="label">${r.label}</span><span class="val"><b class="arrow" data-dir="-1">◀</b><span class="txt">${swatch}${item.name}</span><b class="arrow" data-dir="1">▶</b>${badge}</span></div>`;
+      return `<div class="row${sel}" data-i="${i}"><span class="label">${r.label}</span><span class="val"><b class="arrow" data-dir="-1">‹</b><span class="txt">${swatch}${item.name}</span><b class="arrow" data-dir="1">›</b>${badge}</span></div>`;
     }).join('');
     $('gmsg').textContent = this.msg; $('gmsg').className = this.msgBad ? 'bad' : '';
   }

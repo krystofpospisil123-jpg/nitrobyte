@@ -3,6 +3,14 @@
 // price 0 = owned from the start.
 
 export const CATALOG = {
+  body: [    // car body type (shapes in car.js BODIES)
+    { id: 'coupe', name: 'Sportovní kupé', price: 0 },
+    { id: 'hatch', name: 'Hot hatch', price: 150 },
+    { id: 'jdm', name: 'JDM sedan', price: 250 },
+    { id: 'muscle', name: 'Muscle car', price: 300 },
+    { id: 'pickup', name: 'Street pickup', price: 300 },
+    { id: 'super', name: 'Supersport', price: 500 },
+  ],
   color: [   // body paint (value = 0xRRGGBB)
     { id: 'red', name: 'Červená', price: 0, value: 0xe03030 },
     { id: 'blue', name: 'Modrá', price: 0, value: 0x2f6bff },
@@ -16,6 +24,10 @@ export const CATALOG = {
     { id: 'cyan', name: 'Tyrkysová', price: 80, value: 0x1fd8e8 },
     { id: 'gold', name: 'Zlatá', price: 300, value: 0xe0b020 },
     { id: 'chrome', name: 'Chrom', price: 300, value: 0xc4d0e0 },
+    { id: 'lime', name: 'Limetková', price: 100, value: 0x9cff2a },
+    { id: 'wine', name: 'Vínová', price: 100, value: 0x8a1530 },
+    { id: 'graphite', name: 'Grafit mat', price: 120, value: 0x4a4e58 },
+    { id: 'navy', name: 'Půlnoční modř', price: 120, value: 0x1a2a6a },
   ],
   skin: [    // livery pattern painted over the body colour (drawn in skins.js)
     { id: 'none', name: 'Čistý lak', price: 0 },
@@ -26,6 +38,12 @@ export const CATALOG = {
     { id: 'tiger', name: 'Tygr', price: 200 },
     { id: 'stars', name: 'Hvězdy', price: 250 },
     { id: 'grid', name: 'Neonová mřížka', price: 300 },
+    { id: 'fade', name: 'Přechod', price: 150 },
+    { id: 'carbon', name: 'Karbon', price: 220 },
+    { id: 'tribal', name: 'Tribal vinyl', price: 280 },
+    { id: 'sponsor', name: 'Závodní polep #77', price: 320 },
+    { id: 'splash', name: 'Barevné cákance', price: 350 },
+    { id: 'kanji', name: 'Drift Tokio', price: 400 },
   ],
   wing: [    // rear wing / body kit style (index used by the car builder)
     { id: 'gt', name: 'GT křídlo', price: 0, value: 0 },

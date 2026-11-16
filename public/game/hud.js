@@ -31,9 +31,9 @@ export class Hud {
     const g = cv.getContext('2d');
     g.lineJoin = 'round'; g.lineCap = 'round';
     const path = () => { g.beginPath(); pts.forEach((p, i) => { const [x, y] = this.toMap(p.x, p.z); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); };
-    g.strokeStyle = '#000'; g.lineWidth = 10; path(); g.stroke();
-    g.strokeStyle = '#8c90a8'; g.lineWidth = 6; path(); g.stroke();
-    g.strokeStyle = '#d8dbea'; g.lineWidth = 2; path(); g.stroke();
+    g.strokeStyle = 'rgba(2,6,20,.85)'; g.lineWidth = 11; path(); g.stroke();
+    g.save(); g.shadowColor = '#2aa8ff'; g.shadowBlur = 8; g.strokeStyle = '#2aa8ff'; g.lineWidth = 6; path(); g.stroke(); g.restore();
+    g.strokeStyle = '#d6efff'; g.lineWidth = 2; path(); g.stroke();
     const [sx, sy] = this.toMap(pts[track.data.start.index].x, pts[track.data.start.index].z);
     g.fillStyle = '#fff'; g.fillRect(sx - 4, sy - 4, 8, 8); g.fillStyle = '#000'; g.fillRect(sx - 2, sy - 2, 4, 4);
     this.mapBase = cv;
@@ -71,22 +71,33 @@ export class Hud {
     const kmh = Math.abs(car.speed) * 3.6, maxK = 240, f = Math.min(1, kmh / maxK);
     const A0 = Math.PI * 0.75, SWEEP = Math.PI * 1.5;
     g.clearRect(0, 0, 230, 230);
-    // dark disc
-    g.fillStyle = 'rgba(8,10,34,.82)'; g.beginPath(); g.arc(C, C, R + 12, 0, 7); g.fill();
-    // coloured arc: cyan, red zone at the end
-    g.lineWidth = 10;
-    g.strokeStyle = '#35e8ff'; g.beginPath(); g.arc(C, C, R, A0, A0 + SWEEP * 0.75); g.stroke();
-    g.strokeStyle = '#ff3b3b'; g.beginPath(); g.arc(C, C, R, A0 + SWEEP * 0.75, A0 + SWEEP); g.stroke();
+    // dark glass disc with a thin ring
+    const bg = g.createRadialGradient(C, C, 10, C, C, R + 14);
+    bg.addColorStop(0, 'rgba(14,20,44,.88)'); bg.addColorStop(1, 'rgba(4,6,18,.92)');
+    g.fillStyle = bg; g.beginPath(); g.arc(C, C, R + 12, 0, 7); g.fill();
+    g.strokeStyle = 'rgba(160,200,255,.35)'; g.lineWidth = 2; g.beginPath(); g.arc(C, C, R + 12, 0, 7); g.stroke();
+    // scale: faint track, red zone at the end
+    g.lineCap = 'butt'; g.lineWidth = 8;
+    g.strokeStyle = 'rgba(120,150,210,.22)'; g.beginPath(); g.arc(C, C, R - 2, A0, A0 + SWEEP * 0.78); g.stroke();
+    g.strokeStyle = 'rgba(255,50,40,.35)'; g.beginPath(); g.arc(C, C, R - 2, A0 + SWEEP * 0.78, A0 + SWEEP); g.stroke();
+    // filled arc up to the current speed: blue -> orange -> red, glowing
+    const hot = f < 0.6 ? '#2aa8ff' : f < 0.8 ? '#ff9a1a' : '#ff3322';
+    g.save(); g.shadowColor = hot; g.shadowBlur = 14; g.strokeStyle = hot; g.lineWidth = 8;
+    g.beginPath(); g.arc(C, C, R - 2, A0, A0 + SWEEP * Math.max(0.004, f)); g.stroke(); g.restore();
     // ticks and numbers 0..8
-    g.fillStyle = '#fff'; g.font = 'bold 15px "Courier New"'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = '#e8f2ff'; g.font = 'italic 700 15px "Bahnschrift SemiCondensed", Bahnschrift, "Arial Narrow", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.strokeStyle = 'rgba(220,235,255,.7)'; g.lineWidth = 1.5;
     for (let i = 0; i <= 8; i++) {
-      const a = A0 + SWEEP * i / 8;
-      g.fillText(i, C + Math.cos(a) * (R - 20), C + Math.sin(a) * (R - 20));
+      const a = A0 + SWEEP * i / 8, ca = Math.cos(a), sa = Math.sin(a);
+      g.fillText(i, C + ca * (R - 24), C + sa * (R - 24));
+      g.beginPath(); g.moveTo(C + ca * (R + 5), C + sa * (R + 5)); g.lineTo(C + ca * (R + 10), C + sa * (R + 10)); g.stroke();
     }
     // needle
     const a = A0 + SWEEP * f;
-    g.strokeStyle = '#ff2a2a'; g.lineWidth = 4; g.beginPath(); g.moveTo(C - Math.cos(a) * 8, C - Math.sin(a) * 8); g.lineTo(C + Math.cos(a) * (R - 10), C + Math.sin(a) * (R - 10)); g.stroke();
-    g.fillStyle = '#222'; g.beginPath(); g.arc(C, C, 7, 0, 7); g.fill();
+    g.save(); g.shadowColor = '#ff6a00'; g.shadowBlur = 8; g.strokeStyle = '#fff'; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(C - Math.cos(a) * 10, C - Math.sin(a) * 10); g.lineTo(C + Math.cos(a) * (R - 12), C + Math.sin(a) * (R - 12)); g.stroke(); g.restore();
+    g.strokeStyle = '#ff6a00'; g.lineWidth = 3; g.beginPath(); g.moveTo(C + Math.cos(a) * (R - 32), C + Math.sin(a) * (R - 32)); g.lineTo(C + Math.cos(a) * (R - 12), C + Math.sin(a) * (R - 12)); g.stroke();
+    g.fillStyle = '#1a2038'; g.beginPath(); g.arc(C, C, 7, 0, 7); g.fill(); g.strokeStyle = '#ff8a1a'; g.lineWidth = 2; g.stroke();
     $('speed').textContent = Math.round(kmh);
     $('gearnum').textContent = Math.max(1, Math.min(6, 1 + Math.floor(kmh / 40)));
   }

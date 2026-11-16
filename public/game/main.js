@@ -14,21 +14,25 @@ import { profile, addCoins, lookOf, perks } from './profile.js';
 import { CATALOG, REWARDS, FINISH_REWARD } from './catalog.js';
 import { sfx, music, setVolumes, isMuted } from './sfx.js';
 import { Online, cleanName, cleanLook } from './online.js';
+import { Post } from './post.js';
+import { makeSky } from './scenery.js';
 import './tune.js';
 import city from './tracks/city.js';
 import forest from './tracks/forest.js';
 import desert from './tracks/desert.js';
+import downtown from './tracks/downtown.js';
 
 // Register tracks here: they appear in the race setup menu in this order
 const $ = id => document.getElementById(id);
 let camInit = false;                      // true once the chase camera has been placed (declared early: used by loadTrack)
-const TRACK_LIST = [city, forest, desert];
+const TRACK_LIST = [city, downtown, forest, desert];
 let track = new Track(TRACK_LIST[0]);
 let trackNo = 0;
 
 // ---------- renderer / scene ----------
 const canvas = document.getElementById('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+const urlQ = new URLSearchParams(location.search).get('q');       // ?q=0..3 pins the graphics quality (0 = best)
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0, CONFIG.render.fogNear, CONFIG.render.fogFar);
 const ambient = new THREE.AmbientLight(0xffffff, 1.4);
@@ -36,31 +40,56 @@ const sun = new THREE.DirectionalLight(0xffffff, 2.0);
 sun.position.set(60, 100, 40);
 scene.add(ambient, sun);
 scene.add(track.group);
+const camera = new THREE.PerspectiveCamera(CONFIG.camera.fov, 1, 0.5, 2500);
+const post = new Post(renderer, scene, camera);                   // bloom, speed blur, colour grade
+if (urlQ != null) post.level = Math.max(0, Math.min(3, +urlQ | 0));
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envCache = new Map();
 applyTheme(track.data.theme);
 
-/** Sky, fog and light colours come from the track's theme. */
+/** Reflection map for the wet road: a dark sky with ring of neon bars (what the asphalt "reflects"). */
+function neonEnv(th, key) {
+  if (envCache.has(key)) return envCache.get(key);
+  const s = new THREE.Scene();
+  s.add(makeSky(th));
+  const cols = th.neon || [0xff2d9a, 0x35e8ff, 0xff9a1a, 0x8a5cff];
+  for (let i = 0; i < 28; i++) {
+    const a = (i / 28) * Math.PI * 2, tall = 4 + (i * 7 % 5) * 5;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(10 + (i % 3) * 8, tall, 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(cols[i % cols.length]).multiplyScalar(2.5) }));
+    m.position.set(Math.cos(a) * 110, 6 + (i % 4) * 9, Math.sin(a) * 110); m.lookAt(0, 6, 0); s.add(m);
+  }
+  const tex = pmrem.fromScene(s, 0.03, 0.1, 2500).texture;
+  envCache.set(key, tex);
+  return tex;
+}
+
+/** Sky, fog, lights, bloom and (for wet night streets) the road reflections come from the track's theme. */
 function applyTheme(th) {
   scene.background = new THREE.Color(th.sky);
   scene.fog.color.set(th.fog);
   scene.fog.near = th.fogNear ?? CONFIG.render.fogNear;
   scene.fog.far = th.fogFar ?? CONFIG.render.fogFar;
-  ambient.color.set(th.ambient);
-  sun.color.set(th.sun);
+  ambient.color.set(th.ambient); ambient.intensity = th.ambientI ?? 1.4;
+  sun.color.set(th.sun); sun.intensity = th.sunI ?? 2.0;
+  Car.night = !!th.night;
+  post.setLook({ bloom: th.bloom ?? 0.6, threshold: th.bloomThreshold ?? 0.65, grade: th.grade ?? 1, vignette: th.vignette ?? 0.35 });
+  scene.environment = th.wet ? neonEnv(th, track.data.id) : null;
 }
-
-const camera = new THREE.PerspectiveCamera(CONFIG.camera.fov, 1, 0.5, 2500);
 
 const effects = new Effects(scene);          // sparks, smoke, skid marks
 const hud = new Hud();                       // dials, position, minimap
 hud.setTrack(track, 1);
 
 let viewW = 1, viewH = 1;
+const SCALES = [0.85, 0.85, 0.7, 0.6];                      // render scale per quality level (0 = best)
 function resize() {
-  // Render at reduced resolution; CSS scales the canvas up with hard pixels (retro look)
-  const w = Math.floor(innerWidth * CONFIG.render.pixelScale);
-  const h = Math.floor(innerHeight * CONFIG.render.pixelScale);
+  // Render below native resolution (bloom + grade are the expensive part); CSS scales the canvas to the window
+  const sc = SCALES[post.level];
+  const w = Math.floor(innerWidth * sc);
+  const h = Math.floor(innerHeight * sc);
   renderer.setPixelRatio(1);
   renderer.setSize(w, h, false);
+  post.setSize(w, h);
   viewW = w; viewH = h;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
@@ -105,7 +134,7 @@ function applyProfile() {
 function botLook(i) {
   const pick = a => a[Math.floor(Math.random() * a.length)];
   return {
-    color: parseInt(BOT_COLORS[i % BOT_COLORS.length].slice(1), 16),
+    color: parseInt(BOT_COLORS[i % BOT_COLORS.length].slice(1), 16), body: pick(CATALOG.body).id,
     skin: Math.random() < 0.45 ? 'none' : pick(CATALOG.skin).id, wing: pick(CATALOG.wing).value,
     rims: pick(CATALOG.rims).value, glow: Math.random() < 0.5 ? null : pick(CATALOG.glow).value, flame: pick(CATALOG.flame).value,
   };
@@ -209,6 +238,7 @@ const net = connect({
   onJoin: m => {
     const id = 'phone' + m.slot;
     if (driverById.has(id)) return;
+    if (driverById.has('kb')) { setKeyboard(false); settings.keyboard = false; menu?.render(); toast('Telefon připojen – klávesnice vypnuta'); }   // a phone replaces the keyboard player
     addDriver({ id, name: 'Hráč ' + (m.slot + 1), color: m.color, kind: 'human', controller: new PhoneController() });
   },
   onLeave: m => removeDriver('phone' + m.slot),
@@ -353,11 +383,15 @@ function updateCamera(dt, target, now) {
   camPos.lerp(wantPos, k); camLook.lerp(wantLook, k);
   camInit = true;
   // turbo widens the field of view for a speed-rush feel
-  const wantFov = C.fov + (c.turboTime > 0 ? CONFIG.turbo.fovBoost : 0);
+  const wantFov = C.fov + Math.min(1, Math.abs(c.speed) / CONFIG.car.maxSpeed) * 6 + (c.turboTime > 0 ? CONFIG.turbo.fovBoost : 0);
   fov += (wantFov - fov) * (1 - Math.exp(-6 * dt));
   camera.fov = fov; camera.updateProjectionMatrix();
   camera.position.copy(camPos);
   camera.lookAt(camLook);
+  if (race.state === 'racing') {                                   // engine rumble: a little shake that grows with speed and boost
+    const sh = (Math.max(0, Math.abs(c.speed) / CONFIG.car.maxSpeed - 0.5) * 0.05 + (c.turboTime > 0 ? 0.07 : 0)) * (c.airborne ? 0 : 1);
+    camera.position.x += (Math.random() - 0.5) * sh; camera.position.y += (Math.random() - 0.5) * sh;
+  }
 }
 
 // ---------- online play ----------
@@ -386,6 +420,19 @@ online.on.room = () => {
 };
 online.on.error = msg => menu.onlineMsg(msg, true);
 online.on.peerLeft = id => { removeDriver('p' + id); if (race.state === 'racing') toast('Hráč odešel'); };
+/** The host left and WE are the new host: take over the bots (they continue from where the old host's last update left them). */
+online.on.host = () => {
+  if (!online.isHost) return;
+  let took = 0;
+  for (const d of drivers) {
+    if (!d.remote || d.kind !== 'bot') continue;
+    d.remote = false;
+    d.controller = new BotController(track, CONFIG.bots.preset, 0.97 + Math.random() * 0.06);
+    d.trackIndex = track.project(d.car.x, d.car.z, -1).index;
+    took++;
+  }
+  toast(took && race.state === 'racing' ? 'Hostitel odešel – jsi nový hostitel, boti jedou dál' : 'Jsi nový hostitel');
+};
 online.on.message = (from, data) => {
   const fromHost = from === online.hostId;
   if (data.k === 'st' && Array.isArray(data.list)) {                // car states: a player may only report its own car, the host also its bots
@@ -547,9 +594,28 @@ function frame(now) {
   frameAudio(now, focus, dt);
   if (track.sky) track.sky.position.copy(camera.position);       // sky dome follows the camera
   updateUI(focus);
-  renderer.render(scene, camera);
+  // speed feel: radial blur grows with speed, turbo / boost pads blur + split the colours, a wall hit flashes
+  const fc = focus && menu.screen === 'game' && race.state !== 'lobby' ? focus.car : null;
+  const s01 = fc ? Math.min(1, Math.abs(fc.speed) / (CONFIG.car.maxSpeed + CONFIG.turbo.speedBonus)) : 0;
+  fxBoost += ((fc && fc.turboTime > 0 ? 1 : 0) - fxBoost) * Math.min(1, dt * 8);
+  fxHit = Math.max(0, fxHit - dt * 4); if (fc && fc.hitWall) fxHit = 1;
+  post.render(now / 1000, s01, fxBoost, fxHit);
+  governor(now);
+}
+let fxBoost = 0, fxHit = 0;
+
+/** Adaptive quality: when the average frame takes > 30 ms, step down (bloom off, lower render scale, no blur...). */
+let govN = 0, govSum = 0, govLast = 0, govSince = performance.now();
+function governor(now) {
+  const d = now - govLast; govLast = now;
+  if (urlQ != null || now - govSince < 4000 || d > 120 || document.hidden) return;     // pinned, still warming up, or a hitch / hidden tab
+  govSum += d; govN++;
+  if (govN >= 150) {
+    const avg = govSum / govN; govN = 0; govSum = 0;
+    if (avg > 30 && post.level < 3) { post.level++; resize(); govSince = now; }
+  }
 }
 requestAnimationFrame(frame);
 
 // Debug handle for the browser console
-if (new URLSearchParams(location.search).has('debug')) window.__game = { race, drivers, get track() { return track; }, startRace, loadTrack, menu, settings, effects, profile };
+if (new URLSearchParams(location.search).has('debug')) window.__game = { post, scene, camera, online, race, drivers, get track() { return track; }, startRace, loadTrack, menu, settings, effects, profile };

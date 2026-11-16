@@ -65,7 +65,7 @@ export function buyUpgrade(stat) {
 export function lookOf(override = {}) {
   const pick = cat => findItem(cat, override[cat] ?? profile.equipped[cat]);
   return {
-    color: pick('color').value, skin: pick('skin').id, wing: pick('wing').value,
+    color: pick('color').value, body: pick('body').id, skin: pick('skin').id, wing: pick('wing').value,
     rims: pick('rims').value, glow: pick('glow').value, flame: pick('flame').value,
   };
 }

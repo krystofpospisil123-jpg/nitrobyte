@@ -7,7 +7,7 @@
 <style>
   :root { --panel: rgba(12, 14, 40, .88); --edge: #ff9a1a; --pink: #ff2d9a; --cyan: #35e8ff; }
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: "Courier New", monospace; font-weight: bold; color: #fff; }
-  canvas#c { width: 100vw; height: 100vh; display: block; image-rendering: pixelated; }
+  canvas#c { width: 100vw; height: 100vh; display: block; }
   /* CRT feel: faint scanlines + vignette over everything */
   #crt { position: fixed; inset: 0; pointer-events: none; z-index: 50;
     background: repeating-linear-gradient(to bottom, rgba(0,0,0,.10) 0 1px, transparent 1px 3px),
@@ -192,6 +192,122 @@
   .lobbyrow { cursor: default; }
   #lobby .help { line-height: 1.7; font-size: 14px; }
   .hidden { display: none !important; }
+
+  /* ===== Street skin: night street racing - condensed type, dark glass panels, orange + blue accents ===== */
+  :root {
+    --ui: "Bahnschrift SemiCondensed", "Bahnschrift", "DIN Alternate", "DIN Condensed", "Roboto Condensed", "Arial Narrow", "Segoe UI", sans-serif;
+    --acc: #ff8a1a; --acc2: #ffb35c; --blue: #3aa8ff; --ink: #eef3ff; --mute: #8e9abb; --line: rgba(255,255,255,.09);
+    --glass: rgba(10, 14, 30, .66); --panel: var(--glass); --edge: var(--acc); --pink: var(--acc); --cyan: var(--blue); --hudfont: var(--ui);
+  }
+  html, body { font-family: var(--ui); font-weight: 600; letter-spacing: .02em; color: var(--ink); }
+  #crt { background: radial-gradient(ellipse at center, transparent 65%, rgba(0,0,8,.42) 100%); }
+  .pix { text-shadow: none; }
+
+  /* --- menu backdrop + logo --- */
+  #menu { background: linear-gradient(90deg, rgba(4,6,16,.94) 0%, rgba(4,6,16,.74) 36%, rgba(4,6,16,.12) 72%), linear-gradient(0deg, rgba(4,6,16,.55), transparent 35%); }
+  #menu.overcar { background: linear-gradient(90deg, rgba(4,6,16,.94) 0%, rgba(4,6,16,.7) 40%, rgba(4,6,16,0) 68%); }
+  .logo { font-family: var(--ui); font-weight: 700; font-size: min(10vw, 128px); line-height: .88; letter-spacing: -.01em; transform: skewX(-7deg); }
+  .logo span { color: transparent; text-shadow: none; background: linear-gradient(180deg, #ffffff 0%, #e4ebf8 46%, #8e9ab4 52%, #f6f9ff 100%); -webkit-background-clip: text; background-clip: text;
+    filter: drop-shadow(0 4px 0 rgba(0,0,0,.65)) drop-shadow(0 0 24px rgba(58,168,255,.28)); }
+  .logo span.b { margin-left: 4vw; background: linear-gradient(180deg, #ffe3b8 0%, #ffa340 46%, #e05400 52%, #ffb35c 100%); -webkit-background-clip: text; background-clip: text;
+    filter: drop-shadow(0 4px 0 rgba(0,0,0,.65)) drop-shadow(0 0 26px rgba(255,120,0,.35)); }
+  .sub { font-size: 14px; color: var(--mute); text-transform: uppercase; letter-spacing: .32em; font-weight: 500; margin: 20px 0 26px 4px; display: flex; align-items: center; gap: 14px; }
+  .sub::before { content: ''; width: 42px; height: 2px; background: linear-gradient(90deg, var(--acc), transparent); }
+
+  /* --- panels --- */
+  .joinbox, #panel { background: var(--glass); border: 1px solid var(--line); border-radius: 6px; backdrop-filter: blur(10px); box-shadow: 0 18px 40px rgba(0,0,0,.35); padding: 14px; }
+  .joinbox img, #panel img { border-radius: 4px; image-rendering: auto; }
+  .joinbox .hdr { color: var(--acc); font-size: 13px; letter-spacing: .2em; }
+  .joinbox .url { color: var(--mute); font-weight: 500; }
+  #menuplayers div, #players div { font-weight: 500; }
+
+  /* --- headings --- */
+  #menu h2, #pause h2 { font-size: 34px; font-style: italic; letter-spacing: .12em; text-shadow: none; margin: 0 0 18px; }
+  #menu h2::before, #pause h2::before { content: ''; display: inline-block; width: 6px; height: .8em; margin-right: 14px; background: var(--acc); transform: skewX(-14deg); vertical-align: -1px; box-shadow: 0 0 12px rgba(255,138,26,.6); }
+  .help, #setup .help { color: var(--mute); font-weight: 500; font-size: 13px; line-height: 1.75; letter-spacing: .03em; }
+
+  /* --- menu rows --- */
+  .row { background: linear-gradient(90deg, rgba(14,19,40,.8), rgba(14,19,40,.42)); border: 1px solid var(--line); border-left: 3px solid transparent; border-radius: 3px;
+    padding: 12px 18px; font-size: 20px; text-transform: uppercase; letter-spacing: .06em; backdrop-filter: blur(6px); box-shadow: none; }
+  .row:hover { border-color: rgba(255,138,26,.35); }
+  .row.sel { background: linear-gradient(90deg, rgba(255,138,26,.30), rgba(255,138,26,.07) 70%, rgba(14,19,40,.5)); border-color: rgba(255,138,26,.5); border-left-color: var(--acc);
+    transform: translateX(8px); box-shadow: 0 8px 26px rgba(0,0,0,.35); }
+  @keyframes selpulse { 50% { box-shadow: 0 8px 26px rgba(0,0,0,.35), 0 0 22px rgba(255,138,26,.22); } }
+  .row .label { color: var(--mute); font-size: 15px; letter-spacing: .14em; }
+  .row.sel .label { color: #fff; }
+  .row .txt { color: #fff; font-size: 19px; }
+  .row.sel .txt { color: var(--acc2); }
+  .row .arrow { color: rgba(255,255,255,.3); font-size: 28px; line-height: .8; font-weight: 400; }
+  .row.sel .arrow { color: var(--acc); }
+  .row .arrow:hover { color: #fff; }
+  .row.start { justify-content: center; background: linear-gradient(90deg, #ff6a00, #ffa340); color: #1b0c00; border: none; font-size: 24px; font-weight: 700; letter-spacing: .22em;
+    clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%); margin-top: 18px; }
+  .row.start.sel { background: linear-gradient(90deg, #ff8a1a, #ffc070); transform: translateX(8px) scale(1.02); }
+  .row.back { justify-content: center; color: var(--mute); }
+  .row.back.sel { color: #fff; }
+  #titlemenu { width: min(420px, 82vw); }
+  #titlemenu .row { justify-content: flex-start; gap: 18px; font-size: 26px; padding: 12px 20px; }
+  #titlemenu .num { font-size: 13px; color: var(--acc); letter-spacing: .12em; opacity: .85; width: 22px; }
+  #titlemenu small { display: block; font-size: 11px; color: var(--mute); letter-spacing: .16em; font-weight: 500; margin-top: 2px; }
+  #titlemenu .row.sel small { color: #d8e0f0; }
+  .titlefoot { margin-top: 14px; }
+  .hint2 { color: var(--mute); font-weight: 500; letter-spacing: .06em; }
+  .wallet { color: #ffc94a; text-shadow: none; font-weight: 700; letter-spacing: .04em; }
+  .coin { background: radial-gradient(circle at 35% 35%, #fff2b0, #ffc81a 45%, #c48a00); border: 2px solid #7a5600; }
+  .badge { border-width: 1px; border-radius: 999px; font-size: 12px; padding: 3px 10px; letter-spacing: .08em; }
+  .sw { border-radius: 50%; border: 2px solid rgba(255,255,255,.85); }
+
+  /* --- setup preview --- */
+  #trackprev { border: 1px solid rgba(255,255,255,.14) !important; border-radius: 8px; box-shadow: 0 24px 60px rgba(0,0,0,.55); image-rendering: auto; }
+  #trackname { font-size: 30px; font-style: italic; color: #fff; letter-spacing: .06em; text-shadow: none; }
+  #trackinfo { color: var(--mute); font-weight: 500; letter-spacing: .04em; }
+
+  /* --- online form --- */
+  #online label { color: var(--mute); font-size: 12px; letter-spacing: .22em; }
+  #online input { font-family: var(--ui); font-weight: 600; background: rgba(8,12,28,.8); color: #fff; border: 1px solid var(--line); border-bottom: 2px solid rgba(255,138,26,.45); border-radius: 3px; letter-spacing: .14em; }
+  #online input:focus { border-bottom-color: var(--acc); box-shadow: 0 0 0 3px rgba(255,138,26,.15); }
+
+  /* --- pause / results / toast --- */
+  #pause { background: rgba(3,5,14,.68); backdrop-filter: blur(6px); }
+  #pausemenu { min-width: 380px; }
+  #results { background: radial-gradient(ellipse at center, rgba(8,12,34,.86), rgba(2,3,12,.95)); backdrop-filter: blur(4px); }
+  #results > b { font-size: 40px !important; font-style: italic; letter-spacing: .22em; }
+  #results table { border-collapse: separate; border-spacing: 0 6px; min-width: 520px; }
+  #results td { border: none; padding: 10px 18px; background: rgba(14,19,40,.72); font-size: 20px; }
+  #results td:first-child { color: var(--acc); font-style: italic; font-weight: 700; border-left: 3px solid var(--acc); }
+  #results td:last-child { text-align: right; color: #cfe0ff; font-variant-numeric: tabular-nums; }
+  #results .rewards { color: #ffc94a; font-size: 16px; font-weight: 500; }
+  #toast { background: rgba(10,14,30,.85); border: none; border-left: 3px solid var(--acc); border-radius: 3px; backdrop-filter: blur(8px); font-size: 16px; letter-spacing: .05em; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+  #hint { letter-spacing: .08em; opacity: .4; font-weight: 500; }
+
+  /* --- race HUD --- */
+  #posbox, #lapbox, #speedo, #boost, #mapbox, #coinbox, #standings, #banner, #toast { font-family: var(--ui); font-weight: 700; font-style: italic; }
+  #posbox { border: none; border-left: 4px solid var(--acc); border-radius: 2px; box-shadow: 0 10px 30px rgba(0,0,0,.35); background: linear-gradient(100deg, rgba(8,12,30,.86), rgba(8,12,30,.45)); transform: skewX(-8deg); transform-origin: left top; backdrop-filter: blur(4px); }
+  #posbox > * { transform: skewX(8deg); }
+  #posbox .tag { clip-path: none; background: transparent !important; color: var(--acc) !important; font-size: 12px; letter-spacing: .3em; padding-left: 12px; }
+  #pos { font-size: 68px; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.6); }
+  #poscount { color: var(--acc); font-size: 30px; text-shadow: none; }
+  #timebox { border-top: 1px solid rgba(255,138,26,.35); background: transparent; }
+  #time { font-size: 30px; color: #e8f4ff; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+  #lapbox { font-size: 26px; color: #cfe0ff; letter-spacing: .14em; text-shadow: 0 2px 0 rgba(0,0,0,.6); }
+  #lapbox b { color: #fff; font-size: 56px; text-shadow: 0 2px 0 rgba(0,0,0,.6); }
+  #coinbox { border: none; border-bottom: 2px solid #ffc81a; background: linear-gradient(90deg, rgba(8,12,30,.8), transparent); font-size: 22px; text-shadow: none; }
+  #speednum, #kmh { font-family: var(--ui); }
+  #speednum { text-shadow: 0 2px 0 rgba(0,0,0,.6); font-variant-numeric: tabular-nums; }
+  #kmh { color: var(--mute); letter-spacing: .2em; font-size: 12px; }
+  #gear { color: var(--mute); letter-spacing: .1em; } #gear b { color: var(--acc); }
+  #boost .label { font-size: 14px; letter-spacing: .4em; color: #8fd2ff; text-shadow: none; }
+  #boostbar { border: 1px solid rgba(58,168,255,.6); background: rgba(4,10,30,.75); box-shadow: 0 0 12px rgba(58,168,255,.25); border-radius: 2px; }
+  #boostbar i { background: #0d1a38; }
+  #boostbar i.on { background: linear-gradient(#cfeeff, #3aa8ff) !important; box-shadow: 0 0 6px rgba(58,168,255,.6); }
+  #boostbar.fire i.on { background: linear-gradient(#fff, #8fd2ff) !important; box-shadow: 0 0 10px rgba(255,255,255,.7); animation: flick .1s steps(2) infinite; }
+  @keyframes flick { 50% { opacity: .7; } }
+  #mapbox .stage { font-size: 13px; color: var(--mute); letter-spacing: .32em; text-shadow: none; }
+  #standings { border: none; border-right: 3px solid var(--acc); border-radius: 2px; background: linear-gradient(270deg, rgba(8,12,30,.85), rgba(8,12,30,.25)); font-size: 13px; font-weight: 600; font-style: normal; letter-spacing: .04em; }
+  #standings .me { color: var(--acc2); text-shadow: none; }
+  #banner { text-shadow: 0 6px 0 rgba(0,0,0,.5), 0 0 30px rgba(255,138,26,.35); letter-spacing: .06em; }
+  #banner .cd.go { color: #9dffbf; text-shadow: 0 6px 0 rgba(0,0,0,.5), 0 0 30px rgba(45,255,122,.4); }
+  #banner .rocket { color: #9fd8ff; letter-spacing: .2em; text-shadow: 0 3px 0 rgba(0,0,0,.6), 0 0 16px rgba(58,168,255,.4); }
 </style>
 </head>
 <body>
@@ -211,7 +327,7 @@
   <div id="standings"></div>
 </div>
 
-<div id="boost"><div class="label">BOOST</div><div id="boostbar"></div></div>
+<div id="boost"><div class="label">NITRO</div><div id="boostbar"></div></div>
 <div id="speedo">
   <canvas id="dial" width="230" height="230"></canvas>
   <div id="kmh">KMPH</div>
@@ -231,7 +347,7 @@
 <div id="menu" class="hidden">
   <div id="title" class="screen">
     <div class="logo"><span>NITRO</span><span class="b">BYTE</span></div>
-    <div class="sub">Retro závody z telefonu na tvém PC</div>
+    <div class="sub">Noční street racing z telefonu na tvém PC</div>
     <div class="joinbox">
       <img id="menuqr" alt="QR">
       <div>
@@ -261,12 +377,12 @@
       <div class="oform">
         <label>TVOJE JMÉNO</label>
         <input id="oname" maxlength="16" autocomplete="off" placeholder="Hráč">
-        <div class="row obtn" id="ocreate">★ VYTVOŘIT MÍSTNOST</div>
+        <div class="row obtn" id="ocreate">VYTVOŘIT MÍSTNOST</div>
         <label>KÓD MÍSTNOSTI OD KAMARÁDA</label>
         <input id="ocode" maxlength="4" autocomplete="off" placeholder="ABCD">
-        <div class="row obtn" id="ojoin">▶ PŘIPOJIT SE</div>
+        <div class="row obtn" id="ojoin">PŘIPOJIT SE</div>
         <div id="omsg"></div>
-        <div class="row back" id="oback">◀ ZPĚT</div>
+        <div class="row back" id="oback">‹ ZPĚT</div>
       </div>
       <div class="help">Každý hraje na svém počítači a svém telefonu. Všichni otevřou stejnou adresu hry (viz README – tunel), jeden vytvoří místnost a ostatní zadají její kód.</div>
     </div>
@@ -299,7 +415,7 @@
 <div id="toast"></div>
 <div id="crt"></div>
 
-<script type="importmap">{ "imports": { "three": "/vendor/three/build/three.module.js" } }</script>
+<script type="importmap">{ "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }</script>
 <script type="module" src="./main.js"></script>
 </body>
 </html>

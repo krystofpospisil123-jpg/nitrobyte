@@ -14,7 +14,11 @@ const STORAGE_KEY = 'nitrobyte.settings';
 const LAP_OPTIONS = [1, 2, 3, 5, 8];
 const MAX_BOTS = 7;
 const PAUSE_ITEMS = ['POKRAČOVAT', 'RESTART ZÁVODU', 'HLAVNÍ MENU'];
-const TITLE_ITEMS = [{ id: 'race', label: '▶ ZÁVOD' }, { id: 'online', label: '◉ ONLINE' }, { id: 'garage', label: '◆ GARÁŽ' }];
+const TITLE_ITEMS = [
+  { id: 'race', label: 'ZÁVOD', sub: 'Rychlý závod proti botům' },
+  { id: 'online', label: 'ONLINE', sub: 'Závoď s kamarády přes internet' },
+  { id: 'garage', label: 'GARÁŽ', sub: 'Tuning, lak a vylepšení' },
+];
 const PAUSE_ONLINE = ['POKRAČOVAT', 'ODEJÍT ZE ZÁVODU'];
 
 export function loadSettings() {
@@ -162,16 +166,17 @@ export class Menu {
 
   // ---------- rendering ----------
   renderTitle() {
-    $('titlemenu').innerHTML = TITLE_ITEMS.map((t, i) => `<div class="row${i === this.titleSel ? ' sel' : ''}" data-i="${i}">${t.label}</div>`).join('');
+    $('titlemenu').innerHTML = TITLE_ITEMS.map((t, i) => `<div class="row${i === this.titleSel ? ' sel' : ''}" data-i="${i}">` +
+      `<span class="num">0${i + 1}</span><span>${t.label}<small>${t.sub}</small></span></div>`).join('');
     $('titlecoins').textContent = '● ' + profile.coins;
   }
 
   render() {
     $('rows').innerHTML = this.rowDefs.map((r, i) => {
       const cls = 'row' + (i === this.sel ? ' sel' : '') + (r.id === 'start' ? ' start' : '');
-      if (r.id === 'start') return `<div class="${cls}" data-i="${i}">▶ ${r.label}</div>`;
+      if (r.id === 'start') return `<div class="${cls}" data-i="${i}">${r.label}</div>`;
       return `<div class="${cls}" data-i="${i}"><span class="label">${r.label}</span>` +
-        `<span class="val"><b class="arrow" data-dir="-1">◀</b><span class="txt${this._bump === i ? ' bump' : ''}">${this.value(r.id)}</span><b class="arrow" data-dir="1">▶</b></span></div>`;
+        `<span class="val"><b class="arrow" data-dir="-1">‹</b><span class="txt${this._bump === i ? ' bump' : ''}">${this.value(r.id)}</span><b class="arrow" data-dir="1">›</b></span></div>`;
     }).join('');
     this._bump = -1;
     // track preview + facts

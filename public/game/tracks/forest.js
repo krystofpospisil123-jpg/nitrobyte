@@ -15,13 +15,16 @@ export default {
   elevation: { waves: [[2, 11, 0.3], [3, 4, 0.1], [6, 1.5, 0.6]] },
   terrain: { noise: 14, falloff: 40 },        // hills away from the road
   theme: {
-    skyTop: 0x3f86c8, skyMid: 0x9fd0e8, skyBottom: 0xe2f2cc, sky: 0x9fd0e8,
-    fog: 0xc4e4c4, fogNear: 70, fogFar: 330,
-    backdrop: 'hills', hillColor: 0x2d6a4a,
-    ground: 0x2f6b32,
-    road: [0x7a5c3a, 0x836340], lane: 0xe8dcc0,
-    kerb: [0xf2f2f2, 0x3b8a3e],
-    ambient: 0xd8f0c8, sun: 0xfff3c4,
+    // moonlit mountain road after the rain: dark forest, glossy asphalt, headlights on
+    skyTop: 0x01040c, skyMid: 0x08183a, skyBottom: 0x1e4a5a, sky: 0x08183a, stars: true,
+    fog: 0x0c2230, fogNear: 45, fogFar: 270,
+    backdrop: 'hills', hillColor: 0x0b1f26,
+    ground: 0x0b2412,
+    road: [0x2b2a30, 0x302f36], lane: 0xdfe6ff,
+    kerb: [0xf2f2f2, 0x2d8a3e],
+    night: true, wet: 0.8, bloom: 0.2, bloomThreshold: 0.92, grade: 1, vignette: 0.45,
+    neon: [0x35e8ff, 0x2dff9a, 0xff2d9a, 0x8a5cff],
+    ambient: 0x5a7ab0, ambientI: 1.0, sun: 0x9ab8ff, sunI: 1.0,
   },
   decor: [
     { kind: 'tree', count: 420, minDist: 3.5, maxDist: 60, colors: [0x1f6f2b, 0x2a8a35, 0x15572a, 0x3c9a3c] },

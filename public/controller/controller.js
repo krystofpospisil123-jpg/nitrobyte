@@ -325,7 +325,7 @@ slider.addEventListener('pointerup', sliderUp); slider.addEventListener('pointer
 function computeSteer() {
   if (cfg.mode === 'touch') return touchSteer;
   if (!centered) return 0;                                // no centre yet -> no steering (avoids a random lock)
-  let a = angDiff(rawAngle, centerAngle) * (cfg.invert ? -1 : 1);
+  let a = angDiff(rawAngle, centerAngle) * (cfg.invert ? 1 : -1);      // default direction: tilt right = steer right (the "invert" switch flips it)
   const dz = DEAD_ZONE_DEG;
   a = Math.abs(a) < dz ? 0 : a - Math.sign(a) * dz;       // dead zone without a jump at its edge
   let t = Math.max(-1, Math.min(1, a / (cfg.tilt - dz)));

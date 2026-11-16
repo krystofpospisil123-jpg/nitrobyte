@@ -1,6 +1,7 @@
 // Builds a 3D track from a track data file and answers "where is this car relative to the road?".
 import * as THREE from 'three';
 import * as Scn from './scenery.js';
+import { Car } from './car.js';
 
 // Small seeded RNG (mulberry32) so decoration is deterministic
 function rng(seed) {
@@ -43,6 +44,8 @@ export class Track {
     this.barrier = data.theme.barrier || null;
     this.barrierLimit = this.barrier ? this.width / 2 + 1.8 : 0;
     this.animated = [];                 // update(t) callbacks for moving scenery
+    this.gaps = [];                     // side streets branching off (street theme): { i, side, span }
+    if (data.theme.street) this._planStreets();
 
     this.group = new THREE.Group();
     this._buildTerrain();
@@ -52,6 +55,7 @@ export class Track {
     this._buildBarrier();
     this._buildCoins();
     this._buildDecor();
+    if (data.theme.street) this._buildStreets();
     this._buildExtras();
   }
 
@@ -336,9 +340,10 @@ export class Track {
   }
 
   /** Builds a ribbon strip between two offsets from the centre line, with per-segment vertex colours. */
-  _ribbon(innerOff, outerOff, y, colorFn, skipFn = null) {
-    const pos = [], col = [], idx = [];
+  _ribbon(innerOff, outerOff, y, colorFn, skipFn = null, material = null) {
+    const pos = [], col = [], uv = [], idx = [];
     const c = new THREE.Color();
+    const uw = (outerOff - innerOff) / 10;                        // texture repeats every 10 m
     for (let i = 0; i <= this.n; i++) {
       const k = i % this.n;
       const p = this.pts[k], t = this.tangents[k];
@@ -346,28 +351,36 @@ export class Track {
       const e = this.elev[k] + y;
       pos.push(p.x + nx * innerOff, e, p.z + nz * innerOff);
       pos.push(p.x + nx * outerOff, e, p.z + nz * outerOff);
+      uv.push(0, i * this.spacing / 10, uw, i * this.spacing / 10);
       c.set(colorFn(i)); col.push(c.r, c.g, c.b, c.r, c.g, c.b);
       if (i < this.n && !(skipFn && skipFn(i))) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     g.setIndex(idx);
     g.computeVertexNormals();
-    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+    const m = new THREE.Mesh(g, material || new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
     return m;
   }
 
   _buildRoad() {
-    const th = this.data.theme, w = this.width / 2;
-    this.group.add(this._ribbon(-w, w, 0.02, i => th.road[Math.floor(i / 4) % 2]));
-    // kerbs on both sides, striped
-    const kerb = i => th.kerb[Math.floor(i / 3) % 2];
-    this.group.add(this._ribbon(w, w + 1.2, 0.04, kerb));
-    this.group.add(this._ribbon(-w - 1.2, -w, 0.04, kerb));
+    const th = this.data.theme, w = this.width / 2, night = !!th.night;
+    // wet night asphalt: glossy with puddles that mirror the neon (environment map is set by the game from the theme)
+    const wet = th.wet || 0;
+    const roadMat = wet ? new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 1, metalness: 0.55, roughnessMap: Scn.puddleTexture(), envMapIntensity: 0.9 * wet })
+                        : null;
+    this.group.add(this._ribbon(-w, w, 0.02, i => th.road[Math.floor(i / 4) % 2], null, roadMat));
+    // kerbs on both sides, striped; at night they and the lane lines are unlit (they glow a little in the headlights)
+    const dim = night ? 0.55 : 1, tint = c => new THREE.Color(c).multiplyScalar(dim).getHex();
+    const unlit = () => night ? new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }) : null;
+    const kerb = i => tint(th.kerb[Math.floor(i / 3) % 2]);
+    this.group.add(this._ribbon(w, w + 1.2, 0.04, kerb, i => this._inGap(i, 1), unlit()));
+    this.group.add(this._ribbon(-w - 1.2, -w, 0.04, kerb, i => this._inGap(i, -1), unlit()));
     // dashed lane lines (two lines -> three lanes)
-    const lineCol = th.lane ?? 0xdddddd;
-    for (const off of [-w / 3, w / 3]) this.group.add(this._ribbon(off - 0.18, off + 0.18, 0.045, () => lineCol, i => i % 8 > 3));
+    const lineCol = tint(th.lane ?? 0xdddddd);
+    for (const off of [-w / 3, w / 3]) this.group.add(this._ribbon(off - 0.18, off + 0.18, 0.045, () => lineCol, i => i % 8 > 3, unlit()));
   }
 
   /** Crash barrier along both sides: vertical wall + coloured top strip. Colours alternate per segment. */
@@ -380,8 +393,9 @@ export class Track {
         const k = i % this.n, p = this.pts[k], tn = this.tangents[k];
         const x = p.x - tn.z * off * side, z = p.z + tn.x * off * side;
         pos.push(x, this.elev[k], z, x, this.elev[k] + h, z);
-        c.set(B.colors[Math.floor(i / 5) % B.colors.length]); col.push(c.r, c.g, c.b, c.r, c.g, c.b);
-        if (i < this.n) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+        c.set(B.colors[Math.floor(i / 5) % B.colors.length]); if (this.data.theme.night) c.multiplyScalar(0.6);    // softer neon at night (bloom adds the glow)
+        col.push(c.r, c.g, c.b, c.r, c.g, c.b);
+        if (i < this.n && !this._inGap(i, side)) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -391,7 +405,7 @@ export class Track {
                          : new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
       this.group.add(new THREE.Mesh(g, mat));
       // lighter cap on top
-      const cap = this._ribbon(side > 0 ? off - 0.3 : -off - 0.3, side > 0 ? off + 0.3 : -off + 0.3, h + 0.02, () => B.cap ?? 0xffffff);
+      const cap = this._ribbon(side > 0 ? off - 0.3 : -off - 0.3, side > 0 ? off + 0.3 : -off + 0.3, h + 0.02, () => B.cap ?? 0xffffff, i => this._inGap(i, side));
       this.group.add(cap);
     }
   }
@@ -477,6 +491,7 @@ export class Track {
           const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.8), new THREE.MeshBasicMaterial({ color }));
           bulb.position.set(x, 6.2, z);
           this.group.add(pole, bulb);
+          if (th.night) this.group.add(Scn.lampLight(x, z, p.x, p.z, color));      // halo + pool of light on the road
         } else if (rule.kind === 'cactus') {
           const h = 3 + rand() * 3;
           const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, h, 6), flat(color));
@@ -502,6 +517,142 @@ export class Track {
         placed++;
       }
     }
+  }
+
+  // ---------- street city (theme.street) ----------
+
+  /** Is sample i inside a side-street opening on `side` (+1 / -1)? */
+  _inGap(i, side, pad = 0) {
+    for (const g of this.gaps) {
+      if (g.side !== side) continue;
+      let d = Math.abs(i - g.i); d = Math.min(d, this.n - d);
+      if (d <= g.span + pad) return true;
+    }
+    return false;
+  }
+
+  /** Straight enough here for a junction? */
+  _straight(i, reach = 10) {
+    const a = this.tangents[(i - reach + this.n) % this.n], b = this.tangents[(i + reach) % this.n];
+    return a.x * b.x + a.z * b.z > 0.995;
+  }
+
+  /** Point at `off` metres from the centre line at sample i, on `side` (+1 = left of travel). */
+  _side(i, off, side) {
+    const p = this.pts[i], t = this.tangents[i];
+    return { x: p.x - t.z * off * side, z: p.z + t.x * off * side };
+  }
+
+  /** Choose where side streets branch off (deterministic). */
+  _planStreets() {
+    const rand = rng((this.data.seed || 1) * 131 + 5), w = this.width / 2, sp = this.spacing;
+    const half = 7, span = Math.round(half / sp);
+    let next = Math.round((40 + rand() * 40) / sp);
+    for (let i = next; i < this.n - 30 / sp; i++) {
+      if (i < next || !this._straight(i, Math.round(22 / sp))) continue;
+      const side = rand() < 0.5 ? -1 : 1;
+      let ok = true;                                            // the street must not run into another part of the track
+      for (let o = 14; o <= 70 && ok; o += 7) for (const dz of [-half, 0, half]) {
+        const q = this._side((i + Math.round(dz / sp) + this.n) % this.n, w + o, side);
+        if (this._distToRoad(q.x, q.z) < w + 6) ok = false;
+      }
+      if (!ok) { next = i + Math.round(10 / sp); continue; }
+      this.gaps.push({ i, side, span });
+      next = i + Math.round((70 + rand() * 50) / sp);
+    }
+  }
+
+  _buildStreets() {
+    const th = this.data.theme, rand = rng((this.data.seed || 1) * 97 + 3), w = this.width / 2, sp = this.spacing, n = this.n;
+    const G = this.group, flat = c => new THREE.MeshLambertMaterial({ color: c, flatShading: true });
+    const SW = w + 6.5;                                         // sidewalk outer edge = building line
+    // sidewalks (raised concrete slabs), cut at the side streets
+    const swCol = i => (Math.floor(i / 2) % 2 ? 0x45464e : 0x3e3f47);
+    G.add(this._ribbon(w + 1.2, SW, 0.18, swCol, i => this._inGap(i, 1)));
+    G.add(this._ribbon(-SW, -w - 1.2, 0.18, swCol, i => this._inGap(i, -1)));
+    const heading = i => Math.atan2(this.tangents[i].x, this.tangents[i].z);
+
+    // --- side streets: road stub, centre line, crossing, road block, parked cars, buildings along it ---
+    const lights = [];
+    for (const gp of this.gaps) {
+      const { i, side } = gp, e = this.elev[i], t = this.tangents[i], hd = heading(i);
+      const stubLen = 70, mid = this._side(i, w + stubLen / 2, side);
+      const stub = new THREE.Mesh(new THREE.PlaneGeometry(12, stubLen), flat(th.road[0]));
+      stub.rotation.order = 'YXZ'; stub.rotation.y = hd + Math.PI / 2; stub.rotation.x = -Math.PI / 2;
+      stub.position.set(mid.x, e + 0.01, mid.z); G.add(stub);
+      for (let o = 8; o < stubLen; o += 6) {                    // dashed centre line
+        const q = this._side(i, w + o, side), d = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.03, 0.25), flat(0xc8bf98));
+        d.position.set(q.x, e + 0.03, q.z); d.rotation.y = hd; G.add(d);
+      }
+      for (let k = -2; k <= 2; k++) {                           // zebra crossing on the main road just before the junction
+        const ci = (i - Math.round(11 / sp) + n) % n, q = this._side(ci, k * 2.6, 1);
+        const z = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.03, 3.2), flat(0xcfcfd4));
+        z.position.set(q.x, this.elev[ci] + 0.05, q.z); z.rotation.y = heading(ci); G.add(z);
+      }
+      const bq = this._side(i, w + 2.3, side), bar = Scn.barricade(12.5);       // the invisible barrier line gets a road block
+      bar.position.set(bq.x, e, bq.z); bar.rotation.y = hd + Math.PI / 2; G.add(bar);
+      const lq = this._side((i + Math.round(10 / sp)) % n, w + 4, side), tl = Scn.trafficLight(rand() * 12);
+      tl.position.set(lq.x, e + 0.18, lq.z); tl.rotation.y = hd + (side > 0 ? Math.PI / 2 : -Math.PI / 2); G.add(tl); lights.push(tl);
+      for (let k = 0; k < 3; k++) {                             // parked cars along the side street
+        if (rand() < 0.3) continue;
+        const o = w + 16 + k * 14, lane = (k % 2 ? 1 : -1) * 4.2, q = this._side(i, o, side);
+        const look = { color: [0xb0b4bc, 0x2a2e3a, 0x8a1a22, 0x1a3a6a, 0xd0d0d4, 0x3a5a3a][Math.floor(rand() * 6)], body: ['coupe', 'hatch', 'jdm', 'pickup'][Math.floor(rand() * 4)], skin: 'none', wing: 1, rims: 0x9aa0aa, glow: null, flame: 0xffa21a };
+        const car = Car.buildMesh(look); car.userData.under.visible = false; car.userData.beams.visible = false;
+        car.position.set(q.x + t.x * lane, e, q.z + t.z * lane); car.rotation.y = hd + Math.PI / 2 * (rand() < 0.5 ? 1 : -1); G.add(car);
+      }
+      for (const along of [-1, 1]) for (let k = 0; k < 3; k++) {     // buildings lining the side street
+        const o = w + 16 + k * 18, q = this._side(i, o, side), d = 14 + rand() * 6, h = 10 + rand() * 26;
+        const x = q.x + t.x * along * (6 + 1.5 + d / 2), z = q.z + t.z * along * (6 + 1.5 + d / 2);
+        if (this._distToRoad(x, z) < SW + d / 2 - 1) continue;
+        const b = Scn.streetBuilding(d, h, 16, this._buildingBase(rand), 1 + Math.floor(rand() * 4), along, rand);
+        b.position.set(x, this.elev[i], z); b.rotation.y = hd + Math.PI / 2; G.add(b);
+      }
+    }
+    this.animated.push(time => Scn.updateLights(lights, time));
+
+    // --- building rows along the main road ---
+    for (const side of [-1, 1]) {
+      let s = 0;
+      while (s < n) {
+        const fl = 9 + rand() * 10, steps = Math.max(2, Math.round(fl / sp)), ic = (s + Math.round(steps / 2)) % n;
+        if (this._inGap(ic, side, Math.round((fl / 2 + 3) / sp))) { s += Math.max(1, Math.round(4 / sp)); continue; }
+        const tall = rand() < 0.12, d = 12 + rand() * 12, h = tall ? 45 + rand() * 30 : 9 + rand() * 24;
+        const q = this._side(ic, SW + 0.3 + d / 2, side), hd = heading(ic), t = this.tangents[ic];
+        // all four corners must keep clear of every part of the road (corners of the lap, other streets)
+        let ok = true;
+        const nx = -t.z * side, nz = t.x * side;                 // away from the road
+        for (const [a, b] of [[-1, -1], [-1, 1], [1, -1], [1, 1], [0, 0]]) {
+          const lx = a * d / 2, lz = b * fl / 2;
+          const x = q.x + nx * lx + t.x * lz, z = q.z + nz * lx + t.z * lz;
+          if (this._distToRoad(x, z) < SW - 0.5) { ok = false; break; }
+        }
+        if (ok) {
+          const b = Scn.streetBuilding(d, h, fl - 0.4, this._buildingBase(rand), 1 + Math.floor(rand() * 4), side, rand);
+          b.position.set(q.x, this.elev[ic], q.z); b.rotation.y = hd; G.add(b);
+        }
+        s += steps;
+      }
+    }
+
+    // --- street lamps and trees on the sidewalks ---
+    const step = Math.round(26 / sp), cols = th.lampColors || [0xffb347];
+    for (let i = 0; i < n; i += step) {
+      const side = (i / step) % 2 ? 1 : -1;
+      if (this._inGap(i, side, Math.round(4 / sp))) continue;
+      const q = this._side(i, w + 2.6, side), col = cols[Math.floor(rand() * cols.length)];
+      const lamp = Scn.streetLamp(col); lamp.position.set(q.x, this.elev[i] + 0.18, q.z);
+      lamp.rotation.y = heading(i) + (side > 0 ? 0 : Math.PI); G.add(lamp);
+      const light = Scn.lampLight(q.x, q.z, this.pts[i].x, this.pts[i].z, col); light.position.y = this.elev[i]; G.add(light);
+      const j = (i + Math.round(step / 2)) % n;
+      if (rand() < 0.55 && !this._inGap(j, -side, Math.round(4 / sp))) {
+        const tq = this._side(j, w + 4.2, -side), tree = Scn.streetTree(rand); tree.position.set(tq.x, this.elev[j] + 0.18, tq.z); G.add(tree);
+      }
+    }
+  }
+
+  _buildingBase(rand) {
+    const cols = this.data.theme.buildingColors || [0x6a5a50, 0x50586a, 0x6a6058, 0x585060, 0x7a6a5a, 0x4a5058];
+    return new THREE.Color(cols[Math.floor(rand() * cols.length)]).multiplyScalar(0.45).getHex();
   }
 
   _distToRoad(x, z) {

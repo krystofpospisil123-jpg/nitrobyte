@@ -14,9 +14,10 @@ export default {
   elevation: { waves: [[1, 16, 0.0], [2, 8, 0.4], [4, 3, 0.2]] },
   terrain: { noise: 22, falloff: 40 },
   theme: {
-    skyTop: 0x3a1a5a, skyMid: 0xd0583a, skyBottom: 0xffb04a, sky: 0xd0583a,
-    sunDisc: 0xffd890,
-    fog: 0xe8904e, fogNear: 90, fogFar: 430,
+    skyTop: 0x0e0830, skyMid: 0x8a2a4a, skyBottom: 0xff8a3a, sky: 0x8a2a4a,
+    sunDisc: 0xffb860,
+    fog: 0xb8603e, fogNear: 80, fogFar: 420,
+    night: true, wet: 0, bloom: 0.22, bloomThreshold: 0.9, grade: 1.1, vignette: 0.4,      // dusk: lights on, glowing horizon
     backdrop: 'mesas', mesaColor: 0x7a3a3a,
     ground: 0xc07a3c,
     road: [0x4a4440, 0x524c47], lane: 0xe8e0c8,
@@ -24,7 +25,7 @@ export default {
     barrier: { height: 1.0, colors: [0x8a8a92, 0x70707a], cap: 0xd8d8dc },       // guard rail
     agents: { kind: 'heli', count: 3, height: 34, speed: 0.005 },
     tunnelColor: 0x6a3a2e,
-    ambient: 0xffd2a0, sun: 0xffe0b0,
+    ambient: 0xffb890, ambientI: 1.15, sun: 0xffc890, sunI: 1.5,
   },
   decor: [
     { kind: 'cliff', count: 70, minDist: 28, maxDist: 75, colors: [0xb5603a, 0xc9783f, 0x9c4f30, 0xd98e4f] },
