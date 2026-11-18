@@ -11,6 +11,7 @@ export class Race {
     this.time = 0;                // race clock (s)
     this.finishOrder = [];
     this.onEvent = () => {};      // set by main.js: (type, driver) for HUD messages
+    this.onBump = () => {};       // (remote driver, dvx, dvz, strength): a hit main.js sends to that car's owner
   }
 
   get totalLaps() { return this.laps ?? this.track.laps; }   // `laps` is set from the menu
@@ -116,20 +117,39 @@ export class Race {
     this.order = order;
   }
 
-  /** Simple circle collisions: push overlapping cars apart and scrub a little speed. */
+  /**
+   * Car-to-car hits: separate the cars, then exchange momentum along the contact normal.
+   * The car that drives INTO the other (and a car on turbo) counts as heavier, so it knocks the other one away.
+   * Remote cars are driven by their owner: we only change the cars simulated here and report the rest via onBump.
+   */
   _collide() {
-    const R = CONFIG.race.carRadius * 2, list = this.drivers;
+    const R = CONFIG.race.carRadius * 2, list = this.drivers, K = CONFIG.race.bumpForce;
     for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
-      const a = list[i].car, b = list[j].car;
+      const A = list[i], B = list[j], a = A.car, b = B.car;
       const dx = b.x - a.x, dz = b.z - a.z, d2 = dx * dx + dz * dz;
-      if (d2 >= R * R || d2 === 0) continue;
+      if (d2 >= R * R || d2 === 0 || Math.abs((a.base + a.y) - (b.base + b.y)) > 2.5) continue;
       const d = Math.sqrt(d2), push = (R - d) / 2, nx = dx / d, nz = dz / d;
-      // remote cars are driven by their owner: only push (and slow) the cars simulated here
-      const ra = list[i].remote, rb = list[j].remote;
+      const ra = A.remote, rb = B.remote;
       if (ra && rb) continue;
       const fa = rb ? 2 : 1, fb = ra ? 2 : 1;
-      if (!ra) { a.x -= nx * push * fa; a.z -= nz * push * fa; a.vx *= 0.985; a.vz *= 0.985; }
-      if (!rb) { b.x += nx * push * fb; b.z += nz * push * fb; b.vx *= 0.985; b.vz *= 0.985; }
+      if (!ra) { a.x -= nx * push * fa; a.z -= nz * push * fa; }
+      if (!rb) { b.x += nx * push * fb; b.z += nz * push * fb; }
+      // closing speed along the normal (negative = moving into each other)
+      const vn = (b.vx - a.vx) * nx + (b.vz - a.vz) * nz;
+      if (vn >= -0.5) continue;
+      const sa = Math.max(0, a.vx * nx + a.vz * nz), sb = Math.max(0, -(b.vx * nx + b.vz * nz));   // who drives into whom
+      const ma = (1 + sa / 15) * (a.turboTime > 0 ? 1.6 : 1), mb = (1 + sb / 15) * (b.turboTime > 0 ? 1.6 : 1);
+      const J = -vn * K / (1 / ma + 1 / mb);
+      const MAXDV = CONFIG.race.bumpMax;
+      const dva = Math.min(MAXDV, J / ma), dvb = Math.min(MAXDV, J / mb);   // speed change of each car along the normal
+      // the hit car is also shoved sideways, away from the hitter's path (so it gets knocked off the line, not just forward)
+      const side = (vx, vz, rx, rz, dv) => { const l = Math.hypot(vx, vz) || 1, px = -vz / l, pz = vx / l, s = Math.sign(rx * px + rz * pz) || 1; return [px * s * dv * 0.6, pz * s * dv * 0.6]; };
+      const [la, lza] = dva > dvb ? side(b.vx, b.vz, -nx, -nz, dva) : [0, 0];
+      const [lb, lzb] = dvb >= dva ? side(a.vx, a.vz, nx, nz, dvb) : [0, 0];
+      const A1 = [-nx * dva * 0.6 + la, -nz * dva * 0.6 + lza], B1 = [nx * dvb * 0.6 + lb, nz * dvb * 0.6 + lzb];
+      if (!ra) a.bump(A1[0], A1[1], dva); else this.onBump(A, A1[0], A1[1], dva);
+      if (!rb) b.bump(B1[0], B1[1], dvb); else this.onBump(B, B1[0], B1[1], dvb);
+      this.onEvent('crash', dvb > dva ? B : A, Math.max(dva, dvb), (a.x + b.x) / 2, (a.z + b.z) / 2, A, B);
     }
   }
 }

@@ -15,7 +15,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('nitrobyte.pad.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem('nitrobyte.pad.' + k, JSON.stringify(v)); } catch { /* private mode */ } },
 };
-const cfg = { rot: store.get('rot', 'auto'), tilt: store.get('tilt', 42), mode: store.get('mode', 'tilt'), invert: store.get('invert', false), vibe: store.get('vibe', true) };
+const cfg = { rot: store.get('rot', 'auto'), tilt: store.get('tilt', 42), mode: store.get('mode', 'tilt'), invert: store.get('invert', false), vibe: store.get('vibe', true), dir: store.get('dir2', 0) };   // dir: learned steering sign (0 = not learned yet)
 
 let pair = '';                 // 4-digit code of the PC this phone belongs to (QR link ?pair=1234 or typed in)
 let rawAngle = 0;            // current wheel angle in degrees (+ = clockwise = right)
@@ -40,7 +40,7 @@ document.addEventListener('gesturechange', e => e.preventDefault());
 document.addEventListener('gestureend', e => e.preventDefault());
 document.addEventListener('dblclick', e => e.preventDefault());
 document.addEventListener('touchstart', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
-document.addEventListener('touchmove', e => { if (guardsOn) e.preventDefault(); }, { passive: false });
+document.addEventListener('touchmove', e => { if (guardsOn && !(e.target.closest && e.target.closest('#sheet .card'))) e.preventDefault(); }, { passive: false });   // the settings list may scroll
 document.addEventListener('touchend', e => {                                  // two taps within 350 ms = double-tap zoom
   const t = Date.now();
   if (guardsOn && t - lastTouchEnd < 350) e.preventDefault();
@@ -199,7 +199,7 @@ addEventListener('orientationchange', () => setTimeout(updateRotation, 100));
 
 // Smallest signed difference between two angles in degrees, result in -180..180.
 const angDiff = (a, b) => { let d = a - b; while (d > 180) d -= 360; while (d < -180) d += 360; return d; };
-let lastTheta = null, stillCount = 0, centerSide = null;
+let lastTheta = null, stillCount = 0, centerSide = null, dirCount = 0;
 
 /**
  * Wheel angle = direction of the gravity vector inside the screen plane (x, y of the device).
@@ -239,6 +239,13 @@ function onMotion(e) {
     stillCount = landscape && !moving ? stillCount + 1 : 0;
     if (stillCount > 25) { centerAngle = theta; centered = true; centerSide = dx < 0 ? 90 : 270; smoothed = 0; setStatus(baseStatus); }
     else if (stillCount === 0) setStatus('Drž telefon rovně jako volant…');
+  }
+  // learn the steering direction once: after centring, the player turns the phone to the RIGHT like a wheel
+  if (centered && !cfg.dir && cfg.mode !== 'touch') {
+    const d = angDiff(theta, centerAngle);
+    dirCount = Math.abs(d) > 22 ? dirCount + Math.sign(d) : 0;
+    if (Math.abs(dirCount) >= 8) { cfg.dir = Math.sign(dirCount); store.set('dir2', cfg.dir); dirCount = 0; setStatus('Směr nastaven ✔'); setTimeout(() => setStatus(baseStatus), 1500); }
+    else setStatus('Otoč telefon jako volant DOPRAVA ➜');
   }
   lastTheta = theta;
 }
@@ -283,7 +290,9 @@ hold('gas', 'throttle', true); hold('brake', 'brake', true); hold('drift', 'drif
 const tap = (id, fn) => $(id).addEventListener('pointerdown', e => { e.preventDefault(); fn(); });
 tap('center', () => { centerAngle = rawAngle; centered = true; smoothed = 0; setStatus(baseStatus); });
 tap('gear', () => $('sheet').classList.add('open'));
-tap('close', () => $('sheet').classList.remove('open'));
+const closeSheet = () => $('sheet').classList.remove('open');
+tap('close', closeSheet); tap('close2', closeSheet);
+$('sheet').addEventListener('pointerdown', e => { if (e.target.id === 'sheet') closeSheet(); });   // tap outside the card closes it
 tap('recenter', () => { centerAngle = rawAngle; centered = true; smoothed = 0; setStatus(baseStatus); $('sheet').classList.remove('open'); });
 
 function applyMode() {
@@ -296,6 +305,7 @@ function applyMode() {
   $('tiltval').textContent = cfg.tilt + '°';
 }
 tap('mode', () => { cfg.mode = cfg.mode === 'tilt' ? 'touch' : 'tilt'; store.set('mode', cfg.mode); applyMode(); });
+tap('recal', () => { cfg.dir = 0; store.set('dir2', 0); dirCount = 0; setStatus('Otoč telefon jako volant DOPRAVA ➜'); });
 tap('invert', () => { cfg.invert = !cfg.invert; store.set('invert', cfg.invert); applyMode(); });
 tap('rot', () => { cfg.rot = cfg.rot === 'auto' ? 'cw' : cfg.rot === 'cw' ? 'ccw' : 'auto'; store.set('rot', cfg.rot); applyMode(); updateRotation(); });
 tap('vibe', () => { cfg.vibe = !cfg.vibe; store.set('vibe', cfg.vibe); applyMode(); if (cfg.vibe && navigator.vibrate) navigator.vibrate(60); });
@@ -325,7 +335,8 @@ slider.addEventListener('pointerup', sliderUp); slider.addEventListener('pointer
 function computeSteer() {
   if (cfg.mode === 'touch') return touchSteer;
   if (!centered) return 0;                                // no centre yet -> no steering (avoids a random lock)
-  let a = angDiff(rawAngle, centerAngle) * (cfg.invert ? 1 : -1);      // default direction: tilt right = steer right (the "invert" switch flips it)
+  if (!cfg.dir) return 0;                                 // direction not learned yet (see onMotion)
+  let a = angDiff(rawAngle, centerAngle) * cfg.dir * (cfg.invert ? -1 : 1);
   const dz = DEAD_ZONE_DEG;
   a = Math.abs(a) < dz ? 0 : a - Math.sign(a) * dz;       // dead zone without a jump at its edge
   let t = Math.max(-1, Math.min(1, a / (cfg.tilt - dz)));

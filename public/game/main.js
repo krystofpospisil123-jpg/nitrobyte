@@ -73,7 +73,7 @@ function applyTheme(th) {
   sun.color.set(th.sun); sun.intensity = th.sunI ?? 2.0;
   Car.night = !!th.night;
   post.setLook({ bloom: th.bloom ?? 0.6, threshold: th.bloomThreshold ?? 0.65, grade: th.grade ?? 1, vignette: th.vignette ?? 0.35 });
-  scene.environment = th.wet ? neonEnv(th, track.data.id) : null;
+  scene.environment = neonEnv(th, track.data.id);                 // reflections: wet road + metallic car paint
 }
 
 const effects = new Effects(scene);          // sparks, smoke, skid marks
@@ -81,7 +81,8 @@ const hud = new Hud();                       // dials, position, minimap
 hud.setTrack(track, 1);
 
 let viewW = 1, viewH = 1;
-const SCALES = [0.85, 0.85, 0.7, 0.6];                      // render scale per quality level (0 = best)
+let govN = 0, govSum = 0, govLast = 0, govSince = performance.now();
+const SCALES = [Math.min(1.5, devicePixelRatio || 1), 0.9, 0.72, 0.6];   // render scale per quality level (0 = ultra)
 function resize() {
   // Render below native resolution (bloom + grade are the expensive part); CSS scales the canvas to the window
   const sc = SCALES[post.level];
@@ -90,6 +91,8 @@ function resize() {
   renderer.setPixelRatio(1);
   renderer.setSize(w, h, false);
   post.setSize(w, h);
+  // UI scale for small / large windows (HUD and menus use CSS zoom: var(--s))
+  document.documentElement.style.setProperty('--s', Math.max(0.45, Math.min(1.3, Math.min(innerWidth / 1366, innerHeight / 900))).toFixed(3));
   viewW = w; viewH = h;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
@@ -102,13 +105,34 @@ const drivers = [];                       // every car on the track (humans + bo
 const driverById = new Map();
 const race = new Race(track, drivers);
 let rocketHuman = false;                  // a human got the rocket start -> show it in the banner
-race.onEvent = (type, d, place) => {
+race.onEvent = (type, d, place, ...rest) => {
   if (type === 'rocket' && isLocalHuman(d)) rocketHuman = true;
   if (type === 'finish' && isLocalHuman(d)) {                      // coins for the finishing position
     const scale = Math.max(0.5, Math.min(2, race.totalLaps / 3));         // longer races pay more
     d.reward = Math.max(5, Math.round((REWARDS[place - 1] ?? FINISH_REWARD) * scale / 5) * 5);
     addCoins(d.reward); sfx.reward();
   }
+  if (type === 'crash') onCrash(place, ...rest);
+};
+/** Two cars hit each other: sparks, a crunch for the player, phone vibration. strength = speed change in m/s. */
+let crashAt = 0;
+function onCrash(strength, x, z, A, B) {
+  if (strength < 3) return;
+  const y = (A.car.base + B.car.base) / 2 + 0.8;
+  for (let k = 0; k < Math.min(30, strength * 2); k++) effects.sparks.emit(x, y, z, (Math.random() - 0.5) * strength, 2 + Math.random() * 5, (Math.random() - 0.5) * strength, 0.4, Math.random() < 0.5 ? 0xffd070 : 0xffffff);
+  const now = performance.now();
+  const me = localHuman();
+  if ((A === me || B === me) && now - crashAt > 180) { crashAt = now; sfx.wall(); }
+  for (const d of [A, B]) if (isLocalHuman(d)) buzz(d, [Math.min(160, 40 + strength * 8)]);
+}
+/** Online: we hit a car simulated on another PC -> tell its owner (the player, or the host for bots). */
+const bumpSent = new Map();
+race.onBump = (d, dvx, dvz, strength) => {
+  if (!online.active || strength < 1) return;
+  const to = d.kind === 'bot' ? online.hostId : d.netId, now = performance.now();
+  if (to == null || now - (bumpSent.get(d.netId) || 0) < 250) return;
+  bumpSent.set(d.netId, now);
+  online.send({ k: 'bump', id: d.netId, vx: +dvx.toFixed(2), vz: +dvz.toFixed(2), s: +strength.toFixed(2) }, to);
 };
 const isLocalHuman = d => d.kind === 'human' && !d.remote;     // driven from this PC (phone / keyboard)
 const localHuman = () => drivers.find(isLocalHuman);
@@ -250,6 +274,15 @@ function toPhone(d, data) { if (d.id.startsWith('phone')) net.send({ t: 'to', sl
 const buzz = (d, pattern) => toPhone(d, { t: 'vibe', p: pattern });
 
 function applyAudio() { setVolumes({ music: settings.music, sfx: settings.sfx }); }
+/** Graphics / camera / HUD options from the settings screen. */
+const CAMERAS = [{ distance: 6.8, height: 3.4 }, { distance: 9, height: 4.2 }, { distance: 11.5, height: 5.3 }];
+function applyGraphics() {
+  if (urlQ == null) { const lv = settings.quality >= 0 ? settings.quality : Math.min(post.level, 3); if (lv !== post.level || settings.quality >= 0) { post.level = lv; govSince = performance.now(); } }
+  post.blurOn = settings.blur; post.bloomOn = settings.bloom;
+  Object.assign(CONFIG.camera, CAMERAS[settings.camera] || CAMERAS[1], { fov: settings.fov });
+  $('mapbox').style.display = settings.minimap ? '' : 'none';
+  resize();
+}
 function toast(text) { const t = $('toast'); t.textContent = text; t.classList.remove('show'); void t.offsetWidth; t.classList.add('show'); }
 
 // ---------- menu ----------
@@ -268,6 +301,8 @@ const menu = new Menu({
     onRestart: () => { paused = false; race.state = 'lobby'; startRace(); menu.show('game'); },
     onQuit: quitToMenu,
     onAudio: applyAudio,
+    onGraphics: () => applyGraphics(),
+    onFullscreen: () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.().catch(() => {}); },
     onScreen: s => {                                                  // music follows the screen
       if (s === 'title' || s === 'setup' || s === 'garage' || s === 'online' || s === 'lobby') music.play('menu');
       if (s === 'lobby') { renderLobby(); if (online.isHost) sendCfg(); }
@@ -284,6 +319,7 @@ const menu = new Menu({
   },
 });
 applyAudio();
+applyGraphics();
 if (settings.track) loadTrack(settings.track);
 if (settings.keyboard) setKeyboard(true);
 
@@ -389,7 +425,7 @@ function updateCamera(dt, target, now) {
   camera.position.copy(camPos);
   camera.lookAt(camLook);
   if (race.state === 'racing') {                                   // engine rumble: a little shake that grows with speed and boost
-    const sh = (Math.max(0, Math.abs(c.speed) / CONFIG.car.maxSpeed - 0.5) * 0.05 + (c.turboTime > 0 ? 0.07 : 0)) * (c.airborne ? 0 : 1);
+    const sh = settings.shake ? (Math.max(0, Math.abs(c.speed) / CONFIG.car.maxSpeed - 0.5) * 0.05 + (c.turboTime > 0 ? 0.07 : 0)) * (c.airborne ? 0 : 1) : 0;
     camera.position.x += (Math.random() - 0.5) * sh; camera.position.y += (Math.random() - 0.5) * sh;
   }
 }
@@ -447,6 +483,10 @@ online.on.message = (from, data) => {
       d.net = n;
       if (n.fin && !d.finished) { d.finished = true; d.finishTime = n.ft; race.finishOrder.push(d); }
     }
+  } else if (data.k === 'bump' && race.state === 'racing') {        // another player hit one of OUR cars (clamped: never trust the network)
+    const d = drivers.find(x => !x.remote && x.netId === data.id && (x.kind === 'human' || online.isHost));
+    const c = v => Math.max(-25, Math.min(25, +v || 0));
+    if (d) d.car.bump(c(data.vx), c(data.vz), Math.max(0, Math.min(25, +data.s || 0)));
   } else if (data.k === 'start' && fromHost) startOnlineRace(data);   // only the host starts races / sets the config
   else if (data.k === 'cfg' && fromHost) { lastCfg = { track: Math.max(0, Math.min(TRACK_LIST.length - 1, data.track | 0)), laps: Math.max(1, Math.min(10, data.laps | 0)), bots: Math.max(0, Math.min(7, data.bots | 0)), diff: Math.max(0, Math.min(CONFIG.difficulties.length - 1, data.diff | 0)) }; if (menu.screen === 'lobby') renderLobby(); }
   else if (data.k === 'lobby' && fromHost) { if (menu.screen === 'game' && race.state !== 'lobby') { race.state = 'lobby'; quitToMenu(); } }
@@ -605,10 +645,9 @@ function frame(now) {
 let fxBoost = 0, fxHit = 0;
 
 /** Adaptive quality: when the average frame takes > 30 ms, step down (bloom off, lower render scale, no blur...). */
-let govN = 0, govSum = 0, govLast = 0, govSince = performance.now();
 function governor(now) {
   const d = now - govLast; govLast = now;
-  if (urlQ != null || now - govSince < 4000 || d > 120 || document.hidden) return;     // pinned, still warming up, or a hitch / hidden tab
+  if (urlQ != null || settings.quality >= 0 || now - govSince < 4000 || d > 120 || document.hidden) return;     // pinned, still warming up, or a hitch / hidden tab
   govSum += d; govN++;
   if (govN >= 150) {
     const avg = govSum / govN; govN = 0; govSum = 0;

@@ -308,6 +308,26 @@
   #banner { text-shadow: 0 6px 0 rgba(0,0,0,.5), 0 0 30px rgba(255,138,26,.35); letter-spacing: .06em; }
   #banner .cd.go { color: #9dffbf; text-shadow: 0 6px 0 rgba(0,0,0,.5), 0 0 30px rgba(45,255,122,.4); }
   #banner .rocket { color: #9fd8ff; letter-spacing: .2em; text-shadow: 0 3px 0 rgba(0,0,0,.6), 0 0 16px rgba(58,168,255,.4); }
+  /* --- settings screen --- */
+  #settings { align-items: center; padding: 0 6vw; }
+  #settings .left { width: min(640px, 88vw); }
+  #settings .row { padding: 9px 18px; margin: 6px 0; }
+
+  /* --- small screens: everything scales with --s (set from the window size in main.js) --- */
+  #posbox, #coinbox, #lapbox, #mapbox, #boost, #speedo, #toast, #banner > *, #results > *, #pause > *,
+  #title > *, .screen > .left, .screen > .right { zoom: var(--s, 1); }
+  @media (max-width: 820px) {
+    #setup .right, #lobby .right { display: none; }
+    #setup, #online, #lobby, #garage, #settings { justify-content: center; padding: 0 4vw; }
+    #setup .left, #online .left, #lobby .left, #garage .left { width: min(620px, 92vw); }
+    #hint { display: none; }
+  }
+  @media (max-height: 520px) {
+    .joinbox { display: none; }
+    .sub { margin: 8px 0 10px 4px; }
+    #titlemenu { margin-top: 8px; }
+    #standings { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -397,6 +417,13 @@
       <div class="hdr" style="color:#ffd21a">TELEFON</div>
       <img id="lobbyqr" alt="QR" style="width:170px;image-rendering:pixelated;background:#fff;display:block;margin:6px auto">
       <div id="lobbypair" class="wallet" style="margin:0"></div>
+    </div>
+  </div>
+  <div id="settings" class="screen hidden">
+    <div class="left">
+      <h2>NASTAVENÍ</h2>
+      <div id="srows"></div>
+      <div class="help">Šipky nahoru / dolů = řádek · vlevo / vpravo = změna · Esc = zpět<br>Kvalita AUTOMATICKY sama sníží grafiku, když hra nestíhá.</div>
     </div>
   </div>
   <div id="garage" class="screen hidden">

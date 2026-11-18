@@ -7,6 +7,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { FXAAPass } from 'three/addons/postprocessing/FXAAPass.js';
 
 const StreetShader = {
   uniforms: {
@@ -62,9 +63,12 @@ export class Post {
     this.street = new ShaderPass(StreetShader);
     this.composer.addPass(this.street);
     this.composer.addPass(new OutputPass());
+    this.fxaa = new FXAAPass();                 // smooth the jagged low-poly edges (runs on the final sRGB image)
+    this.composer.addPass(this.fxaa);
+    this.blurOn = true; this.bloomOn = true;    // player settings
     this.u = this.street.uniforms;
     this.bloomStrength = 0.8;
-    this.level = 0;                        // 0 = full quality ... 3 = plain rendering
+    this.level = 1;                        // 0 = ultra, 1 = high, 2 = medium, 3 = low (plain rendering)
     this.enabled = true;
   }
 
@@ -79,10 +83,11 @@ export class Post {
   /** speed01: 0..1 of top speed, boost: 0..1 turbo / pad boost, hit: 0..1 wall hit flash. */
   render(timeSec, speed01 = 0, boost = 0, hit = 0) {
     const u = this.u;
-    u.uBlur.value = this.level >= 2 ? 0 : Math.max(0, speed01 - 0.6) * 0.45 + boost * 0.22;
+    u.uBlur.value = this.level >= 3 || !this.blurOn ? 0 : Math.max(0, speed01 - 0.6) * 0.45 + boost * 0.22;
     u.uAberr.value = boost * 0.004 + hit * 0.012;
     u.uTime.value = timeSec % 10;
-    this.bloom.enabled = this.level < 1 && this.bloomStrength > 0;
+    this.bloom.enabled = this.level < 2 && this.bloomOn && this.bloomStrength > 0;
+    this.fxaa.enabled = this.level < 2;
     this.bloom.strength = this.bloomStrength * (1 + boost * 0.15);
     if (this.level >= 3) this.renderer.render(this._scene || this.composer.passes[0].scene, this.composer.passes[0].camera);
     else this.composer.render();

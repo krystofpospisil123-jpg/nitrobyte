@@ -50,7 +50,7 @@ export default {
     street: true,
     lampColors: [0xffb347, 0xffb347, 0xffd9a0, 0xa8d8ff],
     buildingColors: [0x7a5a48, 0x50586a, 0x6a6058, 0x5a4a5a, 0x8a7a62, 0x4a5058, 0x6a4a3a],
-    night: true, wet: 1, bloom: 0.22, bloomThreshold: 0.92, grade: 1, vignette: 0.42,
+    night: true, moon: true, wet: 1, bloom: 0.22, bloomThreshold: 0.92, grade: 1, vignette: 0.42,
     neon: [0xffb347, 0xff2d9a, 0x35e8ff, 0xffd9a0],
     agents: { kind: 'heli', count: 1, height: 55, speed: 0.004 },
     ambient: 0x6a6aa8, ambientI: 1.1, sun: 0x8aa0d8, sunI: 0.9,

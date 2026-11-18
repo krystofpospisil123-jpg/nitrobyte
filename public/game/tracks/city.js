@@ -33,7 +33,7 @@ export default {
     lane: 0xdfe6ff,
     kerb: [0xff3b3b, 0xf2f2f2],
     // "Underground" night look: wet glossy road, bloom on the neon, headlights on
-    night: true, wet: 1, bloom: 0.22, bloomThreshold: 0.92, grade: 1, vignette: 0.4,
+    night: true, moon: true, wet: 1, bloom: 0.22, bloomThreshold: 0.92, grade: 1, vignette: 0.4,
     neon: [0xff2d9a, 0x35e8ff, 0xff9a1a, 0x8a5cff],
     ambientI: 1.15, sunI: 1.1,
     // neon crash barrier: cars bounce off it

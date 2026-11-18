@@ -51,8 +51,9 @@ export const isMuted = () => vol.muted;
 const midi = m => 440 * Math.pow(2, (m - 69) / 12);
 
 /** Oscillator with an attack / exponential decay envelope. */
-function tone(freq, start, dur, type = 'sine', v = 0.05, dest = sfxBus, slideTo = null, attack = 0.004) {
+function tone(freq, start, dur, type = 'sine', v = 0.05, dest = null, slideTo = null, attack = 0.004) {
   const a = ac(); if (!a) return;
+  dest = dest || sfxBus;                                  // (sfxBus exists only after ac() created the context)
   const t0 = a.currentTime + start, o = a.createOscillator(), g = a.createGain();
   o.type = type; o.frequency.setValueAtTime(freq, t0);
   if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
@@ -61,8 +62,9 @@ function tone(freq, start, dur, type = 'sine', v = 0.05, dest = sfxBus, slideTo 
 }
 
 /** Filtered noise burst. */
-function noise(start, dur, v = 0.1, type = 'highpass', freq = 1000, dest = sfxBus, sweepTo = null, q = 0.8) {
+function noise(start, dur, v = 0.1, type = 'highpass', freq = 1000, dest = null, sweepTo = null, q = 0.8) {
   const a = ac(); if (!a) return;
+  dest = dest || sfxBus;
   const t0 = a.currentTime + start, src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
   src.buffer = noiseBuf; src.loop = true; src.loopStart = Math.random();
   f.type = type; f.Q.value = q; f.frequency.setValueAtTime(freq, t0);

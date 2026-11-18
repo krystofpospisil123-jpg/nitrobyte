@@ -22,7 +22,7 @@ export default {
     ground: 0x0b2412,
     road: [0x2b2a30, 0x302f36], lane: 0xdfe6ff,
     kerb: [0xf2f2f2, 0x2d8a3e],
-    night: true, wet: 0.8, bloom: 0.2, bloomThreshold: 0.92, grade: 1, vignette: 0.45,
+    night: true, moon: true, wet: 0.8, bloom: 0.2, bloomThreshold: 0.92, grade: 1, vignette: 0.45,
     neon: [0x35e8ff, 0x2dff9a, 0xff2d9a, 0x8a5cff],
     ambient: 0x5a7ab0, ambientI: 1.0, sun: 0x9ab8ff, sunI: 1.0,
   },

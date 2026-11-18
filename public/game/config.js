@@ -39,6 +39,9 @@ export const CONFIG = {
     countdown: 3,          // seconds before GO
     checkpoints: 8,        // evenly spaced checkpoints per lap (last one = finish line)
     carRadius: 1.9,        // car-to-car collision radius
+    bumpForce: 1.5,        // how hard cars knock each other away (1 = plain bounce)
+    bumpMax: 16,           // cap on the speed change from one hit (m/s)
+    bumpStun: 0.7,         // seconds a hard-hit car slides with almost no grip
   },
 
   bots: {

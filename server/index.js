@@ -84,8 +84,10 @@ app.set('trust proxy', true);
 app.use(compression());                                                       // three.js is >1 MB: gzip it
 app.get('/healthz', (req, res) => res.type('text').send('ok'));              // for the host's health check
 app.use('/vendor/three', express.static(path.join(ROOT, 'node_modules', 'three'), { maxAge: '7d' }));
-app.use('/game', express.static(path.join(ROOT, 'public', 'game')));
-app.use('/controller', express.static(path.join(ROOT, 'public', 'controller')));
+// no-cache = the browser must revalidate (cheap 304) so players never run an old cached game / controller
+const fresh = { setHeaders: res => res.setHeader('Cache-Control', 'no-cache') };
+app.use('/game', express.static(path.join(ROOT, 'public', 'game'), fresh));
+app.use('/controller', express.static(path.join(ROOT, 'public', 'controller'), fresh));
 app.get('/', (req, res) => res.redirect('/game/'));
 
 /** Address phones should use: the LAN address when the PC page is opened on localhost, otherwise the address it was opened on (tunnel / host). */

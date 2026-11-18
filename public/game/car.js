@@ -52,6 +52,8 @@ export class Car {
     this.base = 0;                  // ground height under the car (set from the track each frame)
     this.groundSlope = 0;           // road grade along the car's heading (+ = uphill)
     this.pitch = 0;                 // smoothed visual pitch
+    this.stun = 0;                  // > 0 after a hard hit: the car slides with little grip
+    this.spin = 0;                  // yaw rate from a hit (rad/s), dies away
     // vertical motion (ramps)
     this.y = 0; this.vy = 0;
     this.airborne = false; this.airTime = 0;
@@ -87,6 +89,15 @@ export class Car {
    * Advance physics by dt seconds.
    * input: { steer -1..1, throttle 0..1, brake 0..1, drift, turbo }   surface: { offroad: bool, ramp: {h, slope} | null }
    */
+  /** Knocked by another car: extra velocity (m/s), a spin and, for a big hit, a little hop. */
+  bump(dvx, dvz, strength) {
+    this.vx += dvx; this.vz += dvz;
+    if (strength < 4) return;
+    this.stun = Math.max(this.stun, CONFIG.race.bumpStun * Math.min(1.5, strength / 12));
+    this.spin += (Math.random() < 0.5 ? -1 : 1) * Math.min(5, strength * 0.22);
+    if (strength > 11 && !this.airborne) { this.airborne = true; this.airTime = 0; this.vy = Math.min(6, strength * 0.25); this.y = Math.max(this.y, 0.05); }
+  }
+
   update(dt, input, surface) {
     const C = CONFIG.car;
     const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
@@ -159,10 +170,12 @@ export class Car {
     const speedFactor = clamp(Math.abs(vf) / C.steerMinSpeed, 0, 1);
     const falloff = 1 - C.steerSpeedFalloff * clamp(Math.abs(vf) / (C.maxSpeed * this.speedScale), 0, 1);
     const yawRate = -this.steer * C.steerRate * speedFactor * falloff * (this.drifting ? D.steerBoost : 1) * (air ? R.airSteer : 1) * Math.sign(vf || 1);
-    this.heading += yawRate * dt;
+    this.heading += (yawRate + this.spin) * dt;
+    this.spin *= Math.exp(-2.5 * dt);
+    if (this.stun > 0) this.stun -= dt;
 
     // --- grip: kill sideways velocity (this is what drift will weaken later) ---
-    if (!air) vl *= Math.exp(-C.grip * (this.drifting ? D.gripMultiplier : 1) * dt);   // no grip in the air
+    if (!air) vl *= Math.exp(-C.grip * (this.drifting ? D.gripMultiplier : 1) * (this.stun > 0 ? 0.1 : 1) * dt);   // no grip in the air, little after a hit
 
     // recompose velocity with the NEW heading so the car turns instead of sliding wide
     const nfx = Math.sin(this.heading), nfz = Math.cos(this.heading);
@@ -209,8 +222,11 @@ export class Car {
     const dark = new THREE.Color(color).multiplyScalar(0.45).getHex();
     // body paint: plain colour, or a livery texture (the texture already contains the colour)
     const skin = skinTexture(look.skin, color);
-    const paint = skin ? new THREE.MeshLambertMaterial({ map: skin, emissive: 0xffffff, emissiveMap: skin, emissiveIntensity: 0.2, flatShading: true }) : lam(color);
-    const black = lam(0x1a1a22), glass = lam(0x0e1828), trim = lam(dark);
+    // metallic paint with a clear-coat sheen: reflects the scene's neon environment map
+    const paint = new THREE.MeshStandardMaterial(skin ? { map: skin, emissive: 0xffffff, emissiveMap: skin, emissiveIntensity: 0.12 } : { color, emissive: new THREE.Color(color).multiplyScalar(0.1) });
+    Object.assign(paint, { metalness: 0.55, roughness: 0.32, envMapIntensity: 1.3, flatShading: true });
+    const black = lam(0x1a1a22), trim = lam(dark);
+    const glass = new THREE.MeshStandardMaterial({ color: 0x0a1220, metalness: 0.9, roughness: 0.08, envMapIntensity: 1.6, flatShading: true });
     const box = (w, h, d, mat, x, y, z, parent, rx = 0) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
       m.position.set(x, y, z); m.rotation.x = rx; parent.add(m); return m;
@@ -280,7 +296,8 @@ export class Car {
 
     // wheels with coloured rims (rear wheels can be bigger)
     const frontWheels = [];
-    const tyreMat = lam(0x15151a), rimMat = glo(look.rims ?? 0xc8ccd8);
+    const rimCol = look.rims ?? 0xc8ccd8;
+    const tyreMat = lam(0x15151a), rimMat = new THREE.MeshStandardMaterial({ color: rimCol, emissive: new THREE.Color(rimCol).multiplyScalar(0.25), metalness: 0.9, roughness: 0.25, envMapIntensity: 1.5, flatShading: true });
     for (const [sx, sz, front] of [[-B.wx, B.wf, true], [B.wx, B.wf, true], [-B.wx, B.wr, false], [B.wx, B.wr, false]]) {
       const r = front ? B.wheel : (B.rearWheel || B.wheel);
       const tyre = new THREE.CylinderGeometry(r, r, 0.55, 12); tyre.rotateZ(Math.PI / 2);

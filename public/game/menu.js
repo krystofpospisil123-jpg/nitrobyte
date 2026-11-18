@@ -9,7 +9,17 @@ import { sfx } from './sfx.js';
 
 const $ = id => document.getElementById(id);
 
-export const DEFAULT_SETTINGS = { track: 0, laps: 3, bots: 5, difficulty: 2, keyboard: false, music: 3, sfx: 4 };
+export const DEFAULT_SETTINGS = { track: 0, laps: 3, bots: 5, difficulty: 2, keyboard: false, music: 3, sfx: 4,
+  quality: -1, blur: true, bloom: true, camera: 1, fov: 65, shake: true, minimap: true };
+const QUALITY = ['AUTOMATICKY', 'ULTRA', 'VYSOKÁ', 'STŘEDNÍ', 'NÍZKÁ'];          // index = quality + 1
+const FOVS = [55, 60, 65, 70, 75, 80, 90];
+const CAMS = ['BLÍZKO', 'NORMÁLNÍ', 'DALEKO'];
+const GRAPHICS = ['quality', 'blur', 'bloom', 'camera', 'fov', 'shake', 'minimap'];
+const SETTINGS_ROWS = [
+  { id: 'quality', label: 'KVALITA GRAFIKY' }, { id: 'blur', label: 'ROZMAZÁNÍ RYCHLOSTÍ' }, { id: 'bloom', label: 'ZÁŘE SVĚTEL' },
+  { id: 'camera', label: 'KAMERA' }, { id: 'fov', label: 'ZORNÉ POLE' }, { id: 'shake', label: 'TŘES KAMERY' }, { id: 'minimap', label: 'MINIMAPA' },
+  { id: 'music', label: 'HUDBA' }, { id: 'sfx', label: 'ZVUKY' }, { id: 'fullscreen', label: 'CELÁ OBRAZOVKA' }, { id: 'back', label: 'ZPĚT' },
+];
 const STORAGE_KEY = 'nitrobyte.settings';
 const LAP_OPTIONS = [1, 2, 3, 5, 8];
 const MAX_BOTS = 7;
@@ -18,6 +28,7 @@ const TITLE_ITEMS = [
   { id: 'race', label: 'ZÁVOD', sub: 'Rychlý závod proti botům' },
   { id: 'online', label: 'ONLINE', sub: 'Závoď s kamarády přes internet' },
   { id: 'garage', label: 'GARÁŽ', sub: 'Tuning, lak a vylepšení' },
+  { id: 'settings', label: 'NASTAVENÍ', sub: 'Grafika, kamera, zvuk' },
 ];
 const PAUSE_ONLINE = ['POKRAČOVAT', 'ODEJÍT ZE ZÁVODU'];
 
@@ -36,7 +47,7 @@ export class Menu {
   constructor({ tracks, settings, cb }) {
     this.tracks = tracks; this.s = settings; this.cb = cb;
     this.screen = 'title';              // 'title' | 'setup' | 'garage' | 'online' | 'lobby' | 'game' | 'pause'
-    this.sel = 0; this.pauseSel = 0; this.titleSel = 0;
+    this.sel = 0; this.pauseSel = 0; this.titleSel = 0; this.ssel = 0;
     this.phoneState = new Map();        // driver id -> previous input, for edge detection
     this.rowDefs = [
       { id: 'track', label: 'TRAŤ' },
@@ -44,8 +55,6 @@ export class Menu {
       { id: 'bots', label: 'BOTI' },
       { id: 'difficulty', label: 'OBTÍŽNOST BOTŮ' },
       { id: 'keyboard', label: 'KLÁVESNICE' },
-      { id: 'music', label: 'HUDBA' },
-      { id: 'sfx', label: 'ZVUKY' },
       { id: 'start', label: 'START ZÁVODU' },
     ];
     this._previews = tracks.map(t => Menu.outline(t));
@@ -65,16 +74,17 @@ export class Menu {
     for (const id of ['menu', 'pause']) { const el = $(id); el.classList.remove('fresh'); void el.offsetWidth; el.classList.add('fresh'); }
     clearTimeout(this._freshTimer);
     this._freshTimer = setTimeout(() => { $('menu').classList.remove('fresh'); $('pause').classList.remove('fresh'); }, 900);
-    const inMenu = ['title', 'setup', 'garage', 'online', 'lobby'].includes(screen);
+    const inMenu = ['title', 'setup', 'garage', 'online', 'lobby', 'settings'].includes(screen);
     document.body.classList.toggle('inmenu', inMenu);        // hides the race HUD behind the menus
     $('menu').classList.toggle('hidden', !inMenu);
-    for (const id of ['title', 'setup', 'garage', 'online', 'lobby']) $(id).classList.toggle('hidden', screen !== id);
+    for (const id of ['title', 'setup', 'garage', 'online', 'lobby', 'settings']) $(id).classList.toggle('hidden', screen !== id);
     $('menu').classList.toggle('overcar', screen === 'garage');
     $('pause').classList.toggle('hidden', screen !== 'pause');
     if (screen === 'title') this.renderTitle();
     if (screen === 'setup') { this.sel = this.rowDefs.length - 1; this.render(); }
     if (screen === 'garage') { this.cb.garage.open(); this.garage.open(); }
     if (screen === 'pause') { this.pauseSel = 0; this.renderPause(); }
+    if (screen === 'settings') { this.ssel = 0; this.renderSettings(); }
     if (screen === 'online') { $('omsg').textContent = ''; setTimeout(() => $('oname').focus(), 50); }
     if (screen !== 'online' && document.activeElement && document.activeElement.tagName === 'INPUT') document.activeElement.blur();
     if (this.cb.onScreen) this.cb.onScreen(screen);
@@ -91,6 +101,11 @@ export class Menu {
       case 'keyboard': return s.keyboard ? 'ZAPNUTÁ' : 'VYPNUTÁ';
       case 'music': return s.music ? '▮'.repeat(s.music) + '▯'.repeat(5 - s.music) : 'VYPNUTO';
       case 'sfx': return s.sfx ? '▮'.repeat(s.sfx) + '▯'.repeat(5 - s.sfx) : 'VYPNUTO';
+      case 'quality': return QUALITY[s.quality + 1];
+      case 'camera': return CAMS[s.camera];
+      case 'fov': return s.fov + '°';
+      case 'blur': case 'bloom': case 'shake': case 'minimap': return s[id] ? 'ZAPNUTO' : 'VYPNUTO';
+      case 'fullscreen': return document.fullscreenElement ? 'ZAPNUTO' : 'VYPNUTO';
     }
     return '';
   }
@@ -106,11 +121,18 @@ export class Menu {
       case 'keyboard': s.keyboard = !s.keyboard; this.cb.onKeyboard(s.keyboard); break;
       case 'music': s.music = Math.max(0, Math.min(5, s.music + dir)); break;
       case 'sfx': s.sfx = Math.max(0, Math.min(5, s.sfx + dir)); break;
+      case 'quality': s.quality = wrap(s.quality + 1 + dir + QUALITY.length, QUALITY.length) - 1; break;
+      case 'camera': s.camera = Math.max(0, Math.min(CAMS.length - 1, s.camera + dir)); break;
+      case 'fov': s.fov = FOVS[Math.max(0, Math.min(FOVS.length - 1, FOVS.indexOf(s.fov) + dir))] ?? 65; break;
+      case 'blur': case 'bloom': case 'shake': case 'minimap': s[id] = !s[id]; break;
+      case 'fullscreen': this.cb.onFullscreen(); setTimeout(() => this.renderSettings(), 300); sfx.select(); return;
       default: return;
     }
     saveSettings(s);
     if (id === 'music' || id === 'sfx') this.cb.onAudio();
+    if (GRAPHICS.includes(id)) this.cb.onGraphics();
     sfx.select();
+    if (this.screen === 'settings') { this._bump = this.ssel; this.renderSettings(); return; }
     this._bump = this.sel;                                      // animate the changed value
     this.render();
   }
@@ -118,7 +140,12 @@ export class Menu {
   /** OK / confirm: act on the current screen. */
   ok() {
     this._press();
-    if (this.screen === 'title') { sfx.click(); const id = TITLE_ITEMS[this.titleSel].id; return this.show(id === 'garage' ? 'garage' : id === 'online' ? 'online' : 'setup'); }
+    if (this.screen === 'title') { sfx.click(); const id = TITLE_ITEMS[this.titleSel].id; return this.show(id === 'race' ? 'setup' : id); }
+    if (this.screen === 'settings') {
+      const id = SETTINGS_ROWS[this.ssel].id;
+      if (id === 'back') { sfx.back(); return this.show('title'); }
+      return this.change(id, 1);
+    }
     if (this.screen === 'lobby') { if (this.cb.isOnline() && this._isHost()) { sfx.click(); this.show('setup'); } return; }
     if (this.screen === 'pause') return this.pauseOk();
     if (this.screen === 'garage') return this.garage.ok();
@@ -131,6 +158,7 @@ export class Menu {
     if (this.screen === 'title') { this.titleSel = (this.titleSel + dir + TITLE_ITEMS.length) % TITLE_ITEMS.length; sfx.select(); this.renderTitle(); }
     else if (this.screen === 'setup') { this.sel = (this.sel + dir + this.rowDefs.length) % this.rowDefs.length; sfx.select(); this.render(); }
     else if (this.screen === 'garage') this.garage.move(dir);
+    else if (this.screen === 'settings') { this.ssel = (this.ssel + dir + SETTINGS_ROWS.length) % SETTINGS_ROWS.length; sfx.select(); this.renderSettings(); }
     else if (this.screen === 'pause') { const n = this.cb.isOnline() ? PAUSE_ONLINE.length : PAUSE_ITEMS.length; this.pauseSel = (this.pauseSel + dir + n) % n; this.renderPause(); }
   }
 
@@ -145,6 +173,7 @@ export class Menu {
   side(dir) {
     if (this.screen === 'setup') this.change(this.rowDefs[this.sel].id, dir);
     else if (this.screen === 'garage') this.garage.change(dir);
+    else if (this.screen === 'settings') this.change(SETTINGS_ROWS[this.ssel].id, dir);
   }
 
   _isHost() { return this.cb.isHost ? this.cb.isHost() : false; }
@@ -155,7 +184,7 @@ export class Menu {
   back() {
     if (this.screen !== 'game') sfx.back();
     if (this.screen === 'setup') this.show(this.cb.isOnline() ? 'lobby' : 'title');
-    else if (this.screen === 'garage' || this.screen === 'online') this.show('title');
+    else if (this.screen === 'garage' || this.screen === 'online' || this.screen === 'settings') this.show('title');
     else if (this.screen === 'lobby') this.cb.onLeaveRoom();
     else if (this.screen === 'pause') this.cb.onResume();
   }
@@ -188,6 +217,16 @@ export class Menu {
       `${(t.pads || []).length}× boost pad · ${(t.ramps || []).length}× skokánek` +
       `<br>převýšení ${this._previews[this.s.track].climb} m`;
     $('trackprev').style.borderColor = '#' + (th.kerb?.[0] ?? 0xff3b6b).toString(16).padStart(6, '0');
+  }
+
+  renderSettings() {
+    $('srows').innerHTML = SETTINGS_ROWS.map((r, i) => {
+      const cls = 'row' + (i === this.ssel ? ' sel' : '') + (r.id === 'back' ? ' back' : '');
+      if (r.id === 'back') return `<div class="${cls}" data-i="${i}">‹ ${r.label}</div>`;
+      return `<div class="${cls}" data-i="${i}"><span class="label">${r.label}</span>` +
+        `<span class="val"><b class="arrow" data-dir="-1">‹</b><span class="txt${this._bump === i ? ' bump' : ''}">${this.value(r.id)}</span><b class="arrow" data-dir="1">›</b></span></div>`;
+    }).join('');
+    this._bump = -1;
   }
 
   renderPause() {
@@ -245,6 +284,12 @@ export class Menu {
     hover($('rows'), () => this.sel, i => { this.sel = i; }, () => this.render());
     hover($('titlemenu'), () => this.titleSel, i => { this.titleSel = i; }, () => this.renderTitle());
     hover($('pausemenu'), () => this.pauseSel, i => { this.pauseSel = i; }, () => this.renderPause());
+    hover($('srows'), () => this.ssel, i => { this.ssel = i; }, () => this.renderSettings());
+    $('srows').addEventListener('click', e => {
+      const row = e.target.closest('.row'); if (!row) return;
+      this.ssel = +row.dataset.i; const arrow = e.target.closest('.arrow');
+      if (arrow) this.change(SETTINGS_ROWS[this.ssel].id, +arrow.dataset.dir); else this.ok();
+    });
     // online form
     const name = () => { const n = ($('oname').value || '').trim().slice(0, 16) || 'Hráč'; try { localStorage.setItem('nitrobyte.name', n); } catch {} return n; };
     const create = () => { sfx.click(); this.onlineMsg('Vytvářím místnost…'); this.cb.onlineCreate(name()); };
@@ -290,7 +335,7 @@ export class Menu {
 
   /** Phones as menu controllers. Call every frame with the connected human drivers. */
   update(humans) {
-    const active = ['title', 'setup', 'garage', 'lobby'].includes(this.screen);   // pause / race ignore phones
+    const active = ['title', 'setup', 'garage', 'lobby', 'settings'].includes(this.screen);   // pause / race ignore phones
     for (const d of humans) {
       const inp = d.controller.last; if (!inp) continue;       // keyboard driver has no .last
       const prev = this.phoneState.get(d.id) || { steer: 0, throttle: 0, brake: 0, drift: false };

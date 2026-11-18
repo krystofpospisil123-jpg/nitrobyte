@@ -117,6 +117,12 @@ export function makeSky(th) {
     const sun = new THREE.Mesh(new THREE.CircleGeometry(R * 0.11, 16), new THREE.MeshBasicMaterial({ color: th.sunDisc, fog: false, depthWrite: false }));
     sun.position.set(-R * 0.55, R * 0.18, -R * 0.8); sun.lookAt(0, 0, 0); sun.renderOrder = -9; grp.add(sun);
   }
+  if (th.moon) {                                                // night: moon with a soft halo
+    const moon = new THREE.Mesh(new THREE.CircleGeometry(R * 0.035, 24), new THREE.MeshBasicMaterial({ color: 0xe8eeff, fog: false, depthWrite: false }));
+    moon.position.set(R * 0.45, R * 0.42, -R * 0.78); moon.lookAt(0, 0, 0); moon.renderOrder = -8; grp.add(moon);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: softGlow(), color: 0x6a7ab0, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+    halo.scale.setScalar(R * 0.3); halo.position.copy(moon.position); halo.renderOrder = -9; grp.add(halo);
+  }
   if (th.stars) {
     const n = 260, pos = [];
     for (let i = 0; i < n; i++) {
